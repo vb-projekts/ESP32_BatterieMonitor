@@ -6,7 +6,7 @@
 //    - 1.30" IIC OLED Display V2.1 (SH1106)
 //    - HC-SR04 Ultraschallsensor
 //    - Batteriespannungsmessung via Spannungsteiler
-//    - Lokaler Webserver (Port 80)
+//    - Lokaler Webserver (Port 80) mit Display Ein/Aus Button
 //    - HTTP POST an Raspberry Pi alle 10 Sekunden
 //
 //  Pin-Belegung:
@@ -20,6 +20,12 @@
 //
 //  Libraries: U8g2 (Library Manager), alle anderen im ESP32 Core
 //  Board: ESP32 Dev Module (NICHT D1_MINI32!)
+//
+//  Changelog:
+//    v1.0 - Grundversion: Uptime, Distanz, Webserver
+//    v1.1 - HTTP POST an Raspberry Pi
+//    v1.2 - Batteriespannungsmessung
+//    v1.3 - Display Ein/Aus Button auf Webseite
 // ================================================================
 
 #include <Arduino.h>
@@ -58,8 +64,8 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 //  BATTERIE ADC
 // ================================================================
 #define BATT_PIN    34
-#define R1          100000.0   // 100 kOhm
-#define R2          27000.0    // 27 kOhm
+#define R1          100000.0   // 100 kOhm (Reichelt: MPR 100K)
+#define R2          27000.0    // 27 kOhm  (Reichelt: METALL 27,0K)
 #define ADC_REF     3.3
 #define ADC_MAX     4095.0
 #define KALI_FAKTOR 1.05       // Anpassen nach Kalibrierung mit Multimeter
@@ -74,6 +80,8 @@ WebServer server(80);
 // ================================================================
 float distanzCm    = 0.0;
 float battSpannung = 0.0;
+bool  displayAn    = true;     // Display-Status: true = AN, false = AUS
+
 unsigned long letzteMessung  = 0;
 unsigned long letzteAnzeige  = 0;
 unsigned long letzterSend    = 0;
@@ -124,6 +132,23 @@ String uptimeString() {
 }
 
 // ================================================================
+//  DISPLAY EIN/AUS HANDLER
+// ================================================================
+void handleDisplayOn() {
+  displayAn = true;
+  u8g2.setPowerSave(0);        // Display physisch einschalten
+  server.sendHeader("Location", "/");
+  server.send(302, "text/plain", "");
+}
+
+void handleDisplayOff() {
+  displayAn = false;
+  u8g2.setPowerSave(1);        // Display physisch ausschalten (spart Strom!)
+  server.sendHeader("Location", "/");
+  server.send(302, "text/plain", "");
+}
+
+// ================================================================
 //  HTTP POST AN RASPBERRY PI
 // ================================================================
 void sendeAnServer() {
@@ -141,11 +166,11 @@ void sendeAnServer() {
   json += "\"uptime_ms\":" + String(millis()) + ",";
   json += "\"distanz_cm\":" + distStr + ",";
   json += "\"batterie_v\":" + String(battSpannung, 2) + ",";
+  json += "\"display_an\":" + String(displayAn ? "true" : "false") + ",";
   json += "\"ip\":\"" + WiFi.localIP().toString() + "\"";
   json += "}";
 
   int httpCode = http.POST(json);
-
   if (httpCode == 200) {
     Serial.println("POST OK: " + json);
   } else {
@@ -173,50 +198,93 @@ void handleRoot() {
   <style>
     body { font-family:'Segoe UI',Arial,sans-serif; background:#1a1a2e;
            color:#eee; display:flex; flex-direction:column; align-items:center;
-           justify-content:center; min-height:100vh; margin:0; }
+           justify-content:center; min-height:100vh; margin:0; padding:20px; }
     h1   { color:#00d4aa; margin-bottom:6px; font-size:1.8em; }
     .subtitle { color:#aaa; margin-bottom:30px; font-size:.9em; }
+    .cards { display:flex; flex-wrap:wrap; gap:12px; justify-content:center;
+             margin-bottom:20px; }
     .card { background:#16213e; border-radius:16px; padding:22px 36px;
-            margin:10px; min-width:260px; text-align:center;
+            min-width:200px; text-align:center;
             box-shadow:0 4px 24px rgba(0,0,0,.4); }
     .card-title { font-size:.8em; text-transform:uppercase; letter-spacing:2px;
                   color:#888; margin-bottom:8px; }
-    .card-value { font-size:2.6em; font-weight:bold; }
+    .card-value { font-size:2.4em; font-weight:bold; }
     .card-sub   { font-size:.9em; color:#aaa; margin-top:6px; }
-    .uptime  .card-value { color:#00d4aa; }
-    .distanz .card-value { color:#e8b86d; }
+    .uptime   .card-value { color:#00d4aa; }
+    .distanz  .card-value { color:#e8b86d; }
     .batterie .card-value { color:#a8e063; }
     .dot { display:inline-block; width:10px; height:10px; background:#00ff88;
            border-radius:50%; margin-right:6px; animation:blink 1s infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
-    .footer { margin-top:30px; font-size:.75em; color:#555; }
+    .btn {
+      display:inline-block; margin-top:14px; padding:10px 24px;
+      border-radius:10px; text-decoration:none; font-weight:bold;
+      font-size:.95em; transition:opacity .2s; cursor:pointer;
+    }
+    .btn:hover { opacity:.75; }
+    .btn-off { background:#ff6b6b22; color:#ff6b6b;
+               border:2px solid #ff6b6b; }
+    .btn-on  { background:#00d4aa22; color:#00d4aa;
+               border:2px solid #00d4aa; }
+    .status-an  { color:#00ff88; }
+    .status-aus { color:#ff6b6b; }
+    .footer { margin-top:20px; font-size:.75em; color:#555; }
   </style>
 </head>
 <body>
   <h1>&#128268; ESP32 Dashboard</h1>
   <p class="subtitle"><span class="dot"></span>Live &ndash; aktualisiert alle 2s</p>
-  <div class="card uptime">
-    <div class="card-title">&#9201; Uptime</div>
-    <div class="card-value">)rawhtml";
+
+  <div class="cards">
+
+    <div class="card uptime">
+      <div class="card-title">&#9201; Uptime</div>
+      <div class="card-value">)rawhtml";
   html += uptimeStr;
-  html += R"rawhtml(</div></div>
-  <div class="card distanz">
-    <div class="card-title">&#128268; Distanz</div>
-    <div class="card-value">)rawhtml";
+  html += R"rawhtml(</div>
+    </div>
+
+    <div class="card distanz">
+      <div class="card-title">&#128268; Distanz</div>
+      <div class="card-value">)rawhtml";
   html += distanzText;
-  html += R"rawhtml(</div></div>
-  <div class="card batterie">
-    <div class="card-title">&#128267; Batterie</div>
-    <div class="card-value">)rawhtml";
+  html += R"rawhtml(</div>
+    </div>
+
+    <div class="card batterie">
+      <div class="card-title">&#128267; Batterie</div>
+      <div class="card-value">)rawhtml";
   html += String(battSpannung, 2) + " V";
   html += R"rawhtml(</div>
-    <div class="card-sub">)rawhtml";
+      <div class="card-sub">)rawhtml";
   html += ladestandText(battSpannung);
-  html += R"rawhtml(</div></div>
+  html += R"rawhtml(</div>
+    </div>
+
+    <!-- Display Ein/Aus Karte -->
+    <div class="card">
+      <div class="card-title">&#128261; Display</div>)rawhtml";
+
+  if (displayAn) {
+    html += R"rawhtml(
+      <div class="card-value status-an">AN</div>
+      <a href="/display/off" class="btn btn-off">Ausschalten</a>)rawhtml";
+  } else {
+    html += R"rawhtml(
+      <div class="card-value status-aus">AUS</div>
+      <a href="/display/on" class="btn btn-on">Einschalten</a>)rawhtml";
+  }
+
+  html += R"rawhtml(
+    </div>
+
+  </div><!-- /cards -->
+
   <div class="footer">)rawhtml";
   html += WiFi.localIP().toString();
   html += R"rawhtml( &bull; Sendet alle 10s an Raspberry Pi</div>
-</body></html>)rawhtml";
+</body>
+</html>)rawhtml";
 
   server.send(200, "text/html; charset=utf-8", html);
 }
@@ -264,8 +332,10 @@ void setup() {
   u8g2.sendBuffer();
   delay(4000);
 
-  // Webserver starten
-  server.on("/", handleRoot);
+  // Webserver Routen registrieren
+  server.on("/",            handleRoot);
+  server.on("/display/on",  handleDisplayOn);
+  server.on("/display/off", handleDisplayOff);
   server.begin();
   Serial.println("Webserver gestartet.");
 }
@@ -285,8 +355,8 @@ void loop() {
     battSpannung = messeBatterie();
   }
 
-  // Display alle 500ms aktualisieren
-  if (jetzt - letzteAnzeige >= 500) {
+  // Display alle 500ms aktualisieren - NUR wenn Display AN ist!
+  if (jetzt - letzteAnzeige >= 500 && displayAn) {
     letzteAnzeige = jetzt;
 
     String uptimeStr = uptimeString();

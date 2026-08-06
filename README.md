@@ -281,7 +281,7 @@ Eine vollständige Projektdokumentation (Word-Dokument) mit allen Schaltplänen,
 Lötanleitungen, Einkaufslisten und Code-Erklärungen befindet sich unter:
 
 ```
-OnlineMeasurer/Dokumentation.docx
+Dokumentation/Dokumentation.docx
 ```
 
 ---

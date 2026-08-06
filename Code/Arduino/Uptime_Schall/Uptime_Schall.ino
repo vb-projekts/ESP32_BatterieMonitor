@@ -86,6 +86,9 @@ unsigned long letzteMessung  = 0;
 unsigned long letzteAnzeige  = 0;
 unsigned long letzterSend    = 0;
 
+bool zeigeStromAufDisplay = false; // Steuert den Wechsel der Display-Ansicht
+
+
 // ================================================================
 //  HILFSFUNKTIONEN
 // ================================================================
@@ -108,6 +111,15 @@ float messeBatterie() {
   }
   float vPin = (summe / 16.0 / ADC_MAX) * ADC_REF;
   return vPin * ((R1 + R2) / R2) * KALI_FAKTOR;
+}
+
+// Hilfsfunktion zum Auslesen des INA226 Sensors
+void leseINA226() {
+  ina226.readAndClearFlags();
+
+  espStrom_mA = ina226.getCurrent_mA();
+  espLeistung_mW = ina226.getBusPower_mW();
+  busSpannung_V = ina226.getBusVoltage_V();
 }
 
 String ladestandText(float v) {
@@ -299,6 +311,15 @@ void setup() {
   Wire.begin(I2C_SDA, I2C_SCL);
   u8g2.begin();
 
+  // INA226 Sensor initialisieren und konfigurieren
+  if (!ina226.init()) {
+    Serial.println("INA226 konnte nicht initialisiert werden!");
+  }
+  
+  // Konfiguration: Durchschnittsmessung aus 16 Werten, 1.1ms Konvertierungszeit
+  ina226.setAverage(AVERAGE_16);
+  ina226.setConversionTime(CONVERSION_TIME_1100, CONVERSION_TIME_1100);// Kalibrierung: 0.1 Ohm Shunt (Standard bei den meisten Boards) und max. 800mA erwarteter Stromina226.setResistorRange(0.1, 0.8);
+
   // HC-SR04
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
@@ -353,6 +374,7 @@ void loop() {
     letzteMessung = jetzt;
     distanzCm    = messeDistanz();
     battSpannung = messeBatterie();
+    leseINA226(); // INA226 Daten alle 500ms abrufen
   }
 
   // Display alle 500ms aktualisieren - NUR wenn Display AN ist!
@@ -374,13 +396,30 @@ void loop() {
     u8g2.setFont(u8g2_font_logisoso16_tr);
     u8g2.drawStr(22, 38, uptimeStr.c_str());
 
-    // Trennlinie + IP-Adresse
+    // Trennlinie
     u8g2.drawHLine(0, 42, 128);
-    u8g2.setFont(u8g2_font_ncenB08_tr);
-    u8g2.drawStr(0, 53, "IP:");
-    u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.drawStr(20, 53, ipStr.c_str());
-    u8g2.drawStr(0, 63, "Webserver aktiv");
+
+    // Automatischer Wechsel alle 3 Sekunden (3000ms Taktung ueber millis)
+    if ((jetzt / 3000) % 2 == 0) {
+      // ANSICHT 1: IP-Adresse und Webserver-Status
+      u8g2.setFont(u8g2_font_ncenB08_tr);
+      u8g2.drawStr(0, 53, "IP:");
+      u8g2.setFont(u8g2_font_6x10_tr);
+      u8g2.drawStr(20, 53, ipStr.c_str());
+      u8g2.drawStr(0, 63, "Webserver aktiv");
+    } else {
+      // ANSICHT 2: Live-Energieverbrauch vom INA226
+      u8g2.setFont(u8g2_font_ncenB08_tr);
+      u8g2.drawStr(0, 53, "Power:");
+      u8g2.setFont(u8g2_font_6x10_tr);
+      
+      // Formatierung: "X mA (Y mW)" zusammensetzen
+      String stromAnzeige = String(espStrom_mA, 0) + "mA (" + String(espLeistung_mW, 0) + "mW)";
+      u8g2.drawStr(42, 53, stromAnzeige.c_str());
+      
+      // Untere Statuszeile waehrend der Strommessung
+      u8g2.drawStr(0, 63, "INA226 Live-Messung");
+    }
 
     u8g2.sendBuffer();
   }

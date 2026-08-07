@@ -68,7 +68,7 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 #define R2          27000.0    // 27 kOhm  (Reichelt: METALL 27,0K)
 #define ADC_REF     3.3
 #define ADC_MAX     4095.0
-#define KALI_FAKTOR 1.05       // Anpassen nach Kalibrierung mit Multimeter
+#define KALI_FAKTOR 1.513       // Anpassen nach Kalibrierung mit Multimeter init: 1.05
 
 // ================================================================
 //  WEBSERVER
@@ -87,7 +87,6 @@ unsigned long letzteAnzeige  = 0;
 unsigned long letzterSend    = 0;
 
 bool zeigeStromAufDisplay = false; // Steuert den Wechsel der Display-Ansicht
-
 
 // ================================================================
 //  HILFSFUNKTIONEN

@@ -26,6 +26,9 @@
 //    v1.1 - HTTP POST an Raspberry Pi
 //    v1.2 - Batteriespannungsmessung
 //    v1.3 - Display Ein/Aus Button auf Webseite
+//    v1.4 - Update -Funktionalitaet  -HTTPUpdate
+//           Tools → Partition Scheme → "Default 4MB with spiffs"
+//           oder → "Minimal SPIFFS (1.9MB APP with OTA)"
 // ================================================================
 
 #include <Arduino.h>
@@ -34,6 +37,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <HTTPClient.h>
+#include <HTTPUpdate.h>     // im ESP32 Core enthalten
 
 // ================================================================
 //  KONFIGURATION - HIER ANPASSEN
@@ -42,7 +46,18 @@ const char* ssid         = "DeinNetzwerkName";
 const char* password     = "DeinPasswort";
 
 // IP des Raspberry Pi eintragen!
-const char* serverUrl    = "http://192.168.178.46:5000/api/data";
+const char* serverBase    = "http://192.168.178.46:5000";
+const char* serverUrl     = serverBase+"/api/data";
+
+// ================================================================
+//  Aktuelle Version des ESP32
+// ================================================================
+#define FIRMWARE_VERSION "1.4"
+#define VERSION_URL serverBase+"/firmware/version"
+#define FIRMWARE_URL serverBase+"/firmware/download"
+
+// Neue globale Variable
+String updateStatus = "";
 
 // Sendeintervall in Millisekunden (10 Sekunden)
 const unsigned long SEND_INTERVAL = 10000;
@@ -146,6 +161,47 @@ void handleDisplayOff() {
   u8g2.setPowerSave(1);        // Display physisch ausschalten (spart Strom!)
   server.sendHeader("Location", "/");
   server.send(302, "text/plain", "");
+}
+
+// ================================================================
+//  Handler: Versionsprüfung + Update anstoßen
+// ================================================================
+void handleUpdate() {
+  HTTPClient http;
+  http.begin(VERSION_URL);
+  int code = http.GET();
+  if (code == 200) {
+    String body = http.getString();
+    // Einfach prüfen ob "version" im JSON neuer ist
+    // (für komplexes JSON-Parsing: ArduinoJson Library)
+    if (body.indexOf(FIRMWARE_VERSION) == -1) {
+      // Neue Version verfügbar!
+      updateStatus = "Update laeuft...";
+      server.send(200, "text/plain", "Update gestartet!");
+      http.end();
+      // Update durchführen
+      WiFiClient client;
+      t_httpUpdate_return ret = httpUpdate.update(client, FIRMWARE_URL);
+      switch (ret) {
+        case HTTP_UPDATE_OK:
+          // ESP32 startet automatisch neu
+          break;
+        case HTTP_UPDATE_FAILED:
+          updateStatus = "Update fehlgeschlagen!";
+          break;
+        case HTTP_UPDATE_NO_UPDATES:
+          updateStatus = "Kein Update noetig.";
+          break;
+      }
+    } else {
+      updateStatus = "Bereits aktuell (v" + String(FIRMWARE_VERSION) + ")";
+      server.send(200, "text/plain", updateStatus);
+    }
+  } else {
+    updateStatus = "Server nicht erreichbar!";
+    server.send(503, "text/plain", updateStatus);
+  }
+  http.end();
 }
 
 // ================================================================
@@ -275,16 +331,29 @@ void handleRoot() {
       <a href="/display/on" class="btn btn-on">Einschalten</a>)rawhtml";
   }
 
+  html += R"rawhtml(</div></div><!-- /cards -->)rawhtml";
+
+  // Neue Karte fuer Firmewareupdate im HTML:
   html += R"rawhtml(
-    </div>
+    <div class="card">
+      <div class="card-title">🔁 Firmware</div>
+      <div class="card-value" style="font-size:1.2em; color:#a78bfa">
+        v)rawhtml";
+  html += FIRMWARE_VERSION;
+  html += R"rawhtml(</div>
+      <a href="/update" class="btn" style="background:#a78bfa22;
+        color:#a78bfa; border:2px solid #a78bfa; margin-top:12px;
+        display:inline-block; padding:10px 20px; border-radius:10px;
+        text-decoration:none; font-weight:bold;">
+        🔁 Update pruefen
+      </a>
+    </div>)rawhtml";
 
-  </div><!-- /cards -->
-
-  <div class="footer">)rawhtml";
+  html += R"rawhtml(<div class="footer">)rawhtml";
   html += WiFi.localIP().toString();
   html += R"rawhtml( &bull; Sendet alle 10s an Raspberry Pi</div>
-</body>
-</html>)rawhtml";
+          </body>
+          </html>)rawhtml";
 
   server.send(200, "text/html; charset=utf-8", html);
 }
@@ -336,6 +405,7 @@ void setup() {
   server.on("/",            handleRoot);
   server.on("/display/on",  handleDisplayOn);
   server.on("/display/off", handleDisplayOff);
+  server.on("/update",      handleUpdate);
   server.begin();
   Serial.println("Webserver gestartet.");
 }

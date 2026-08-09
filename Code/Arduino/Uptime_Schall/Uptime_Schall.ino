@@ -26,6 +26,7 @@
 //    v1.1 - HTTP POST an Raspberry Pi
 //    v1.2 - Batteriespannungsmessung
 //    v1.3 - Display Ein/Aus Button auf Webseite
+//    v1.4 - Kalibrierungsfaktor per Webseite einstellbar
 // ================================================================
 
 #include <Arduino.h>
@@ -38,8 +39,8 @@
 // ================================================================
 //  KONFIGURATION - HIER ANPASSEN
 // ================================================================
-const char* ssid         = "DeinNetzwerkName";
-const char* password     = "DeinPasswort";
+const char* ssid     = "GeGe24G";
+const char* password = "KatrinHat12";
 
 // IP des Raspberry Pi eintragen!
 const char* serverUrl    = "http://192.168.178.46:5000/api/data";
@@ -63,12 +64,16 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 // ================================================================
 //  BATTERIE ADC
 // ================================================================
-#define BATT_PIN    34
-#define R1          100000.0   // 100 kOhm (Reichelt: MPR 100K)
-#define R2          27000.0    // 27 kOhm  (Reichelt: METALL 27,0K)
-#define ADC_REF     3.3
-#define ADC_MAX     4095.0
-#define KALI_FAKTOR 1.05       // Anpassen nach Kalibrierung mit Multimeter
+#define BATT_PIN  34
+#define R1        100000.0   // 100 kOhm (Reichelt: MPR 100K)
+#define R2        27000.0    // 27 kOhm  (Reichelt: METALL 27,0K)
+#define ADC_REF   3.3
+#define ADC_MAX   4095.0
+
+// Kalibrierungsfaktor - jetzt als Variable (aenderbar per Webseite!)
+// Berechnung: kaliWert = Multimeter_Wert / Angezeigter_Wert
+// Beispiel: Multimeter 12.53V, Webseite zeigt 8.28V -> 12.53 / 8.28 = 1.513
+float kaliFaktor = 1.05;
 
 // ================================================================
 //  WEBSERVER
@@ -80,11 +85,15 @@ WebServer server(80);
 // ================================================================
 float distanzCm    = 0.0;
 float battSpannung = 0.0;
-bool  displayAn    = true;     // Display-Status: true = AN, false = AUS
+bool  displayAn    = true; // Display-Status: true = AN, false = AUS
 
 unsigned long letzteMessung  = 0;
 unsigned long letzteAnzeige  = 0;
 unsigned long letzterSend    = 0;
+
+// Statusmeldung fuer Kalibrierung (wird kurz auf Webseite angezeigt)
+String kaliStatus = "";
+unsigned long kaliStatusZeit = 0;
 
 // ================================================================
 //  HILFSFUNKTIONEN
@@ -107,7 +116,7 @@ float messeBatterie() {
     delay(5);
   }
   float vPin = (summe / 16.0 / ADC_MAX) * ADC_REF;
-  return vPin * ((R1 + R2) / R2) * KALI_FAKTOR;
+  return vPin * ((R1 + R2) / R2) * kaliFaktor;
 }
 
 String ladestandText(float v) {
@@ -149,6 +158,44 @@ void handleDisplayOff() {
 }
 
 // ================================================================
+//  KALIBRIERUNG HANDLER
+// ================================================================
+void handleKalibrierung() {
+  // Multimeter-Wert aus dem Formular lesen
+  if (server.hasArg("multimeter")) {
+    float multimeterWert = server.arg("multimeter").toFloat();
+
+    // Plausibilitaetspruefung
+    if (multimeterWert < 8.0 || multimeterWert > 16.0) {
+      kaliStatus = "FEHLER: Wert muss zwischen 8.0V und 16.0V liegen!";
+    } else if (battSpannung < 1.0) {
+      kaliStatus = "FEHLER: Kein gueltiger Messwert vom ADC!";
+    } else {
+      // Aktuellen Rohwert ohne kaliFaktor berechnen
+      float rohwert = battSpannung / kaliFaktor;
+
+      // Neuen Kalibrierungsfaktor berechnen
+      float neuerFaktor = multimeterWert / rohwert;
+
+      // Sicherheitsgrenze: Faktor muss realistisch sein
+      if (neuerFaktor < 0.5 || neuerFaktor > 3.0) {
+        kaliStatus = "FEHLER: Berechneter Faktor ausserhalb Bereich (0.5-3.0)!";
+      } else {
+        kaliFaktor = neuerFaktor;
+        kaliStatus = "OK: Kalibrierungsfaktor gesetzt auf " + String(kaliFaktor, 3);
+        Serial.println("Neuer kaliFaktor: " + String(kaliFaktor, 4));
+      }
+    }
+  } else {
+    kaliStatus = "FEHLER: Kein Wert empfangen!";
+  }
+
+  kaliStatusZeit = millis();
+  server.sendHeader("Location", "/");
+  server.send(302, "text/plain", "");
+}
+
+// ================================================================
 //  HTTP POST AN RASPBERRY PI
 // ================================================================
 void sendeAnServer() {
@@ -167,6 +214,7 @@ void sendeAnServer() {
   json += "\"distanz_cm\":" + distStr + ",";
   json += "\"batterie_v\":" + String(battSpannung, 2) + ",";
   json += "\"display_an\":" + String(displayAn ? "true" : "false") + ",";
+  json += "\"kali_faktor\":" + String(kaliFaktor, 4) + ",";
   json += "\"ip\":\"" + WiFi.localIP().toString() + "\"";
   json += "}";
 
@@ -186,6 +234,12 @@ void handleRoot() {
   String uptimeStr   = uptimeString();
   String distanzText = (distanzCm < 0 || distanzCm > 400)
                        ? "Kein Objekt" : String(distanzCm, 1) + " cm";
+
+  // Statusmeldung nur 5 Sekunden anzeigen
+  String aktuellerKaliStatus = "";
+  if (kaliStatus != "" && (millis() - kaliStatusZeit) < 5000) {
+    aktuellerKaliStatus = kaliStatus;
+  }
 
   String html = R"rawhtml(
 <!DOCTYPE html>
@@ -222,21 +276,48 @@ void handleRoot() {
       font-size:.95em; transition:opacity .2s; cursor:pointer;
     }
     .btn:hover { opacity:.75; }
-    .btn-off { background:#ff6b6b22; color:#ff6b6b;
-               border:2px solid #ff6b6b; }
-    .btn-on  { background:#00d4aa22; color:#00d4aa;
-               border:2px solid #00d4aa; }
+    .btn-off { background:#ff6b6b22; color:#ff6b6b; border:2px solid #ff6b6b; }
+    .btn-on  { background:#00d4aa22; color:#00d4aa; border:2px solid #00d4aa; }
     .status-an  { color:#00ff88; }
     .status-aus { color:#ff6b6b; }
+
+    /* Kalibrierungs-Box */
+    .kali-box {
+      background:#16213e; border-radius:16px; padding:24px 32px;
+      width:100%; max-width:480px; margin-bottom:16px;
+      box-shadow:0 4px 24px rgba(0,0,0,.4);
+      border:1px solid #0f3460;
+    }
+    .kali-box h3 { color:#e8b86d; margin-bottom:4px; font-size:1.0em;
+                   text-transform:uppercase; letter-spacing:2px; }
+    .kali-info { font-size:.85em; color:#888; margin-bottom:16px; }
+    .kali-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+                justify-content:center; }
+    .kali-row label { color:#aaa; font-size:.9em; }
+    .kali-row input[type=number] {
+      background:#0f3460; color:#eee; border:1px solid #00d4aa;
+      border-radius:8px; padding:8px 12px; font-size:1.1em;
+      width:110px; text-align:center;
+    }
+    .kali-row input[type=number]:focus { outline:none; border-color:#e8b86d; }
+    .btn-kali {
+      background:#e8b86d22; color:#e8b86d; border:2px solid #e8b86d;
+      border-radius:10px; padding:9px 20px; font-weight:bold;
+      font-size:.95em; cursor:pointer; transition:opacity .2s;
+    }
+    .btn-kali:hover { opacity:.75; }
+    .kali-aktuell { font-size:.85em; color:#888; margin-top:10px; }
+    .kali-status-ok  { color:#00ff88; font-size:.9em; margin-top:8px; font-weight:bold; }
+    .kali-status-err { color:#ff6b6b; font-size:.9em; margin-top:8px; font-weight:bold; }
+
     .footer { margin-top:20px; font-size:.75em; color:#555; }
   </style>
 </head>
 <body>
-  <h1>&#128268; ESP32 Dashboard</h1>
+  <h1>&#128268; ESP32 Dashboard v1.4</h1>
   <p class="subtitle"><span class="dot"></span>Live &ndash; aktualisiert alle 2s</p>
 
   <div class="cards">
-
     <div class="card uptime">
       <div class="card-title">&#9201; Uptime</div>
       <div class="card-value">)rawhtml";
@@ -260,7 +341,6 @@ void handleRoot() {
   html += ladestandText(battSpannung);
   html += R"rawhtml(</div>
     </div>
-
     <!-- Display Ein/Aus Karte -->
     <div class="card">
       <div class="card-title">&#128261; Display</div>)rawhtml";
@@ -277,12 +357,48 @@ void handleRoot() {
 
   html += R"rawhtml(
     </div>
+  </div>
 
-  </div><!-- /cards -->
+  <!-- Kalibrierungs-Box -->
+  <div class="kali-box">
+    <h3>&#9881; Batterie Kalibrierung</h3>
+    <p class="kali-info">
+      Multimeter-Wert eingeben &rarr; Kalibrierungsfaktor wird automatisch berechnet.
+      Kein Neu-Flashen noetig!
+    </p>
+    <form action="/kalibrierung" method="GET">
+      <div class="kali-row">
+        <label>Multimeter zeigt:</label>
+        <input type="number" name="multimeter" step="0.01" min="8.0" max="16.0"
+               placeholder="z.B. 12.53" required>
+        <span style="color:#aaa">V</span>
+        <button type="submit" class="btn-kali">&#10003; Kalibrieren</button>
+      </div>
+    </form>
+    <p class="kali-aktuell">
+      Aktueller Faktor: <strong style="color:#e8b86d">)rawhtml";
+  html += String(kaliFaktor, 4);
+  html += R"rawhtml(</strong>
+      &nbsp;&bull;&nbsp; ESP32 misst gerade: <strong style="color:#a8e063">)rawhtml";
+  html += String(battSpannung, 2) + " V";
+  html += R"rawhtml(</strong>
+    </p>)rawhtml";
+
+  // Statusmeldung anzeigen falls vorhanden
+  if (aktuellerKaliStatus != "") {
+    if (aktuellerKaliStatus.startsWith("OK")) {
+      html += "<p class=\"kali-status-ok\">&#10003; " + aktuellerKaliStatus + "</p>";
+    } else {
+      html += "<p class=\"kali-status-err\">&#10005; " + aktuellerKaliStatus + "</p>";
+    }
+  }
+
+  html += R"rawhtml(
+  </div> <!-- /cards -->
 
   <div class="footer">)rawhtml";
   html += WiFi.localIP().toString();
-  html += R"rawhtml( &bull; Sendet alle 10s an Raspberry Pi</div>
+  html += R"rawhtml( &bull; v1.4 &bull; Sendet alle 10s an Raspberry Pi</div>
 </body>
 </html>)rawhtml";
 
@@ -298,7 +414,7 @@ void setup() {
   // Display initialisieren
   Wire.begin(I2C_SDA, I2C_SCL);
   u8g2.begin();
-
+  
   // HC-SR04
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
@@ -321,7 +437,6 @@ void setup() {
   }
   Serial.println("\nIP: " + WiFi.localIP().toString());
 
-  // IP kurz auf Display anzeigen
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_ncenB08_tr);
   u8g2.drawStr(0, 14, "WiFi OK!");
@@ -332,12 +447,14 @@ void setup() {
   u8g2.sendBuffer();
   delay(4000);
 
-  // Webserver Routen registrieren
-  server.on("/",            handleRoot);
-  server.on("/display/on",  handleDisplayOn);
-  server.on("/display/off", handleDisplayOff);
+  // Alle Routen registrieren
+  server.on("/",             handleRoot);
+  server.on("/display/on",   handleDisplayOn);
+  server.on("/display/off",  handleDisplayOff);
+  server.on("/kalibrierung", handleKalibrierung);
   server.begin();
-  Serial.println("Webserver gestartet.");
+  Serial.println("Webserver v1.4 gestartet.");
+  Serial.println("Kalibrierungsfaktor: " + String(kaliFaktor, 4));
 }
 
 // ================================================================
@@ -362,9 +479,8 @@ void loop() {
     String uptimeStr = uptimeString();
     String ipStr     = WiFi.localIP().toString();
 
-    u8g2.clearBuffer();
-
     // Uptime Bereich
+    u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_ncenB08_tr);
     u8g2.drawStr(20, 12, "ESP32 Uptime");
     u8g2.drawHLine(0, 15, 128);
@@ -373,7 +489,7 @@ void loop() {
     u8g2.drawLine(10, 30, 14, 30);
     u8g2.setFont(u8g2_font_logisoso16_tr);
     u8g2.drawStr(22, 38, uptimeStr.c_str());
-
+    
     // Trennlinie + IP-Adresse
     u8g2.drawHLine(0, 42, 128);
     u8g2.setFont(u8g2_font_ncenB08_tr);
@@ -381,7 +497,6 @@ void loop() {
     u8g2.setFont(u8g2_font_6x10_tr);
     u8g2.drawStr(20, 53, ipStr.c_str());
     u8g2.drawStr(0, 63, "Webserver aktiv");
-
     u8g2.sendBuffer();
   }
 

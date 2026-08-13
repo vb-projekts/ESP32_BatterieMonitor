@@ -47,8 +47,8 @@
 // ================================================================
 //  KONFIGURATION - HIER ANPASSEN
 // ================================================================
-const char* ssid         = "DeinNetzwerkName";
-const char* password     = "DeinPasswort";
+const char* ssid         = "GeGe24G";
+const char* password     = "KatrinHat12";
 
 // URLs zum Raspberry Pi
 const char* serverUrl    = "http://192.168.178.46:5000/api/data";

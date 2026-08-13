@@ -166,11 +166,13 @@ HTML_TEMPLATE = """
         <tr>
             <th>IP-Adresse</th>
             <th>Uptime</th>
-            <th>Liter Gesamt</th>
-            <th>Liter Session</th>
+            <th>Verbrauch Gesamt</th>
+            <th>Verbrauch Session</th>
             <th>Impulse</th>
             <th>Batterie</th>
             <th>Firmware</th>
+            <!-- Spalte: Display-Status (AN/AUS) vom Board -->
+            <th>Display</th>
             <th>Letztes Update</th>
         </tr>
         {% for ip, d in devices_lj18a3.items() %}
@@ -187,6 +189,12 @@ HTML_TEMPLATE = """
                 {{ "%.2f"|format(d.batterie_v) }} V
             </td>
             <td class="value-purple">v{{ d.firmware }}</td>
+            <!-- Display-Status: AN (grün) oder AUS (grau) -->
+            {% if d.display_an %}
+                <td style="color:#00ff99; font-weight:bold;">&#128994; AN</td>
+            {% else %}
+                <td style="color:#888;">&#9898; AUS</td>
+            {% endif %}
             <td class="timestamp">{{ d.last_seen }}</td>
         </tr>
         {% endfor %}
@@ -205,6 +213,8 @@ HTML_TEMPLATE = """
             <th>Distanz</th>
             <th>Batterie</th>
             <th>Firmware</th>
+            <!-- Spalte: Display-Status (AN/AUS) vom Board -->
+            <th>Display</th>
             <th>Letztes Update</th>
         </tr>
         {% for ip, d in devices_schall.items() %}
@@ -225,6 +235,12 @@ HTML_TEMPLATE = """
                 {{ "%.2f"|format(d.batterie_v) }} V
             </td>
             <td class="value-purple">v{{ d.firmware }}</td>
+            <!-- Display-Status: AN (grün) oder AUS (grau) -->
+            {% if d.display_an %}
+                <td style="color:#00ff99; font-weight:bold;">&#128994; AN</td>
+            {% else %}
+                <td style="color:#888;">&#9898; AUS</td>
+            {% endif %}
             <td class="timestamp">{{ d.last_seen }}</td>
         </tr>
         {% endfor %}
@@ -276,11 +292,17 @@ HTML_TEMPLATE = """
             <th>IP</th>
             <th>Typ</th>
             <th>Details</th>
+            <th>Impulse</th>
+            <th>Verbrauch Gesamt</th>
+            <th>Verbrauch Session</th>
+            <th>Distanz</th>
+            <th>Batterie</th>
         </tr>
         {% for msg in messages[-20:]|reverse %}
         <tr>
             <td class="timestamp">{{ msg.zeit }}</td>
             <td>{{ msg.ip }}</td>
+            <!-- Spalte 3: Typ mit Badge -->
             <td>
                 {% if msg.typ == 'LJ18A3' %}
                     <span class="badge badge-wasser">LJ18A3</span>
@@ -288,7 +310,46 @@ HTML_TEMPLATE = """
                     <span class="badge badge-schall">HC-SR04</span>
                 {% endif %}
             </td>
-            <td style="font-size:0.85em; color:#aaa;">{{ msg.details }}</td>
+            <!-- Spalte 4: Details als kompakter Text -->
+            <td style="font-size: 0.85em; color: #aaa;">{{ msg.details }}</td>
+            
+            {% if msg.typ == 'LJ18A3' %}
+                <!-- LJ18A3: Wasserverbrauch-Felder befüllen; Distanz ist nicht vorhanden (—) -->
+                <!-- Spalte 5: Impulse -->
+                <td style="color:#00ff99;">{{ msg.impulse_gesamt }}</td>
+                <!-- Spalte 6: Verbrauch Gesamt -->
+                <td style="color:#00ff99; font-weight:bold;">{{ "%.1f"|format(msg.liter_gesamt) }} L</td>
+                <!-- Spalte 7: Verbrauch Session -->
+                <td style="color:#aaa;">{{ "%.1f"|format(msg.liter_session) }} L</td>
+                <!-- Spalte 8: Distanz (nicht vorhanden) -->
+                <td style="color:#555;">&#8212;</td>
+                <!-- Spalte 9: Batterie -->
+                {% if msg.batterie_v < 12.0 %}
+                    <td class="value-warn">{{ "%.2f"|format(msg.batterie_v) }} V</td>
+                {% else %}
+                    <td class="value-ok">{{ "%.2f"|format(msg.batterie_v) }} V</td>
+                {% endif %}
+            {% else %}
+                <!-- HC-SR04: Distanz + Batterie befüllen; Wasserverbrauch-Felder sind nicht vorhanden (—) -->
+                <!-- Spalte 5: Impulse (nicht vorhanden) -->
+                <td style="color:#555;">&#8212;</td>
+                <!-- Spalte 6: Verbrauch Gesamt (nicht vorhanden) -->
+                <td style="color:#555;">&#8212;</td>
+                <!-- Spalte 7: Verbrauch Session (nicht vorhanden) -->
+                <td style="color:#555;">&#8212;</td>
+                <!-- Spalte 8: Distanz -->
+                {% if msg.distanz_cm == -1 %}
+                    <td style="color:#888;">kein Objekt</td>
+                {% else %}
+                    <td style="color:#00d4ff;">{{ "%.1f"|format(msg.distanz_cm) }} cm</td>
+                {% endif %}
+                <!-- Spalte 9: Batterie -->
+                {% if msg.batterie_v < 12.0 %}
+                    <td class="value-warn">{{ "%.2f"|format(msg.batterie_v) }} V</td>
+                {% else %}
+                    <td class="value-ok">{{ "%.2f"|format(msg.batterie_v) }} V</td>
+                {% endif %}
+            {% endif %}
         </tr>
         {% endfor %}
     </table>
@@ -328,6 +389,9 @@ def empfange_daten():
                     'impulse_gesamt': int(daten.get('impulse_gesamt', 0)),
                     'batterie_v':     float(daten.get('batterie_v', 0)),
                     'firmware':       daten.get('firmware', '?'),
+                    # display_an: True = Display AN, False = Display AUS
+                    # Standardwert True falls das Feld im JSON fehlt (Abwaertskompatibilitaet)
+                    'display_an':     bool(daten.get('display_an', True)),
                     'last_seen':      now_str
                 }
                 details = (f"Liter: {daten.get('liter_gesamt', 0):.1f} L | "
@@ -344,6 +408,9 @@ def empfange_daten():
                     'distanz_cm': float(daten.get('distanz_cm', -1)),
                     'batterie_v': float(daten.get('batterie_v', 0)),
                     'firmware':   daten.get('firmware', '?'),
+                    # display_an: True = Display AN, False = Display AUS
+                    # Standardwert True falls das Feld im JSON fehlt (Abwaertskompatibilitaet)
+                    'display_an': bool(daten.get('display_an', True)),
                     'last_seen':  now_str
                 }
                 details = (f"Distanz: {daten.get('distanz_cm', -1)} cm | "
@@ -351,12 +418,32 @@ def empfange_daten():
                            f"FW: v{daten.get('firmware', '?')}")
 
             # Nachrichten-Log
-            messages.append({
-                'zeit':    now_str,
-                'ip':      ip,
-                'typ':     sensor_typ,
-                'details': details
-            })
+            if sensor_typ == 'LJ18A3':
+                # LJ18A3: Wasserverbrauch-Felder befüllen; Distanz nicht vorhanden → -1
+                messages.append({
+                    'zeit':           now_str,
+                    'ip':             ip,
+                    'typ':            sensor_typ,
+                    'details':        details,
+                    'impulse_gesamt': int(daten.get('impulse_gesamt', 0)),
+                    'liter_gesamt':   float(daten.get('liter_gesamt', 0)),
+                    'liter_session':  float(daten.get('liter_session', 0)),
+                    'distanz_cm':     -1,                                    # LJ18A3 hat keine Distanzmessung
+                    'batterie_v':     float(daten.get('batterie_v', 0)),     # Batteriespannung in Volt
+                })
+            else:
+                # HC-SR04: Distanz + Batterie befüllen; Wasserverbrauch nicht vorhanden → 0
+                messages.append({
+                    'zeit':           now_str,
+                    'ip':             ip,
+                    'typ':            sensor_typ,
+                    'details':        details,
+                    'impulse_gesamt': 0,                                     # HC-SR04 hat keinen Impulszähler
+                    'liter_gesamt':   0.0,                                   # HC-SR04 misst keinen Wasserverbrauch
+                    'liter_session':  0.0,                                   # HC-SR04 misst keinen Wasserverbrauch
+                    'distanz_cm':     float(daten.get('distanz_cm', -1)),    # Distanz in cm (-1 = kein Objekt)
+                    'batterie_v':     float(daten.get('batterie_v', 0)),     # Batteriespannung in Volt
+                })
             if len(messages) > 100:
                 messages = messages[-100:]
 

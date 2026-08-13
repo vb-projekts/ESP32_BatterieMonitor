@@ -5,9 +5,7 @@
 #    - ESP32 Ultraschall-Monitor (Uptime_Schall.ino)  -> sensor_typ fehlt ODER "HC-SR04"
 #    - ESP32 Wasser-Monitor      (Uptime_LJ18A3.ino)  -> sensor_typ = "LJ18A3"
 #
-ESP32 Monitor Server - v1.3
-Laeuft auf dem Raspberry Pi (DietPi), empfaengt Daten vom ESP32
-und zeigt sie auf einer Webseite an.
+#  Beide Geräte können gleichzeitig Daten senden.
 #  Webseite zeigt alle Geräte in getrennten Tabellen an.
 #
 #  OTA Firmware Update Endpunkte (GETRENNT pro Typ!):
@@ -15,13 +13,12 @@ und zeigt sie auf einer Webseite an.
 #             GET /firmware/schall/download  -> .bin Datei
 #    LJ18A3:  GET /firmware/lj18a3/version   -> aktuelle Version
 #             GET /firmware/lj18a3/download  -> .bin Datei
-  v2.0 - Multi-ESP32 Support: Jedes Board bekommt eigene Status-Karte
 #
 #  Firmware .bin Dateien ablegen in:
 #    ~/esp32-monitor/firmware/schall/firmware.bin
 #    ~/esp32-monitor/firmware/lj18a3/firmware.bin
 #
-Nach Aenderungen an dieser Datei Daemon neu starten:
+#  Versionsdateien ablegen in:
 #    ~/esp32-monitor/firmware/schall/version.txt  (Inhalt z.B.: 1.6)
 #    ~/esp32-monitor/firmware/lj18a3/version.txt  (Inhalt z.B.: 1.6)
 #
@@ -61,14 +58,11 @@ def lese_version(pfad):
         return "0.0"
 
 # ============================================================
-#  DATENSPEICHER (im RAM, kein DB noetig)
+#  Geräte-Datenspeicher - getrennt nach Sensor-Typ
 #  Schlüssel = IP-Adresse des ESP32
 # ============================================================
 devices_schall = {}   # HC-SR04 Ultraschall Geräte
-
-# Pro Board wird der letzte Datensatz gespeichert:
-# boards = { "192.168.178.84": { ...letzter Eintrag... }, ... }
-letzter   = {}
+devices_lj18a3 = {}   # LJ18A3 Wasser-Monitor Geräte
 
 # Nachrichten-Log (letzte 100 Einträge)
 messages = []
@@ -92,135 +86,48 @@ HTML_TEMPLATE = """
         }
         h1 { color: #00d4ff; }
         h2 { color: #00d4ff; margin-top: 30px; border-bottom: 1px solid #00d4ff; padding-bottom: 5px; }
-    h2   { color: #00d4aa; margin-bottom: 12px; font-size: 1.2em; margin-top: 28px; }
         h2.water { color: #00ff99; border-bottom-color: #00ff99; }
-    .cards { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 28px; }
-    /* ── Board-Sektion ── */
-    .card {
+        h2.firmware { color: #a78bfa; border-bottom-color: #a78bfa; }
+
+        table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 10px;
             background: #16213e;
-      border-radius: 14px;
+            border-radius: 8px;
             overflow: hidden;
         }
         th {
             background: #0f3460;
-      padding: 20px 28px;
-      text-align: center;
+            padding: 10px 12px;
+            text-align: left;
             font-size: 0.85em;
+            color: #aaa;
         }
-    .card-title { font-size: .75em; text-transform: uppercase;
-                  letter-spacing: 2px; color: #888; margin-bottom: 8px; }
-    .card-value { font-size: 2.0em; font-weight: bold; }
-    .card-sub   { font-size: .85em; color: #aaa; margin-top: 4px; }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #0f3460;
             font-size: 0.95em;
         }
-    .uptime   .card-value { color: #00d4aa; }
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
-    .board-title {
-      font-size: 1.1em;
-      font-weight: bold;
-      color: #eee;
-    }
-    .board-ip {
-      font-size: .85em;
-      color: #888;
-      font-family: monospace;
-    }
-    .distanz  .card-value { color: #e8b86d; }
-      font-size: .8em;
-      color: #666;
-      margin-left: auto;
-    }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #1e3a5f; }
 
-    /* Status Badge */
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 12px;
-    .batterie .card-value { color: #a8e063; }
-      font-size: .8em;
-      font-weight: bold;
-    }
-    .status   .card-value { color: #00ff88; font-size: 1.4em; }
-    .status.offline .card-value { color: #ff6b6b; }
-    .display-an  .card-value { color: #00ff88; }
-    .display-aus .card-value { color: #ff6b6b; }
+        .value-blue  { color: #00d4ff; font-weight: bold; }
+        .value-green { color: #00ff99; font-weight: bold; }
+        .value-warn  { color: #ff6b6b; font-weight: bold; }
+        .value-ok    { color: #00ff99; }
+        .value-purple { color: #a78bfa; font-weight: bold; }
 
         .badge {
-      display: inline-block; width: 10px; height: 10px;
+            display: inline-block;
             padding: 2px 8px;
-      border-radius: 50%; margin-right: 6px;
-      animation: blink 1.2s infinite;
+            border-radius: 10px;
+            font-size: 0.8em;
             font-weight: bold;
         }
-    .online  .dot { background: #00ff88; }
-    .offline .dot { background: #ff6b6b; animation: none; }
+        .badge-schall { background: #0f3460; color: #00d4ff; }
+        .badge-wasser { background: #0f4030; color: #00ff99; }
 
-
-    /* Mini-Karten pro Board */
-    .mini-cards {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    .mini-card {
-      background: #0f3460;
-      border-radius: 10px;
-      padding: 12px 20px;
-      min-width: 130px;
-      text-align: center;
-      flex: 1;
-    }
-    .mini-card-title {
-      font-size: .7em;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: #888;
-      margin-bottom: 6px;
-    }
-    .mini-card-value {
-      font-size: 1.6em;
-      font-weight: bold;
-    }
-    .mini-card-sub { font-size: .75em; color: #888; margin-top: 3px; }
-    .col-uptime   { color: #00d4aa; }
-    .col-distanz  { color: #e8b86d; }
-    .col-batterie { color: #a8e063; }
-    .col-display-an  { color: #00ff88; }
-    .col-display-aus { color: #ff6b6b; }
-
-    /* Zusammenfassung oben */
-    .summary {
-      display: flex;
-      gap: 16px;
-      margin-bottom: 24px;
-      flex-wrap: wrap;
-    }
-    .summary-card {
-      background: #16213e;
-      border-radius: 12px;
-      padding: 14px 24px;
-      text-align: center;
-      flex: 1;
-      min-width: 120px;
-      box-shadow: 0 4px 16px rgba(0,0,0,.3);
-    }
-    .summary-card-title { font-size: .75em; color: #888;
-                          text-transform: uppercase; letter-spacing: 1.5px; }
-    h2 { color: #00d4aa; margin-bottom: 12px; font-size: 1.2em; }
-    .col-total   { color: #a78bfa; }
-    .col-online  { color: #00d4aa; }
-    .col-offline { color: #ff6b6b; }
-
-    /* Nachrichten-Tabelle */
         .fw-box {
             background: #16213e;
             border-radius: 8px;
@@ -245,41 +152,19 @@ HTML_TEMPLATE = """
             padding: 15px;
         }
         .timestamp { color: #888; font-size: 0.8em; }
-    .ip-tag {
-      display: inline-block; padding: 2px 8px; border-radius: 6px;
-      font-size: .8em; font-family: monospace;
-      background: #0f346044; color: #aaa;
-    }
-
         .footer { color: #555; font-size: 0.8em; margin-top: 20px; }
     </style>
 </head>
 <body>
-<h1>&#128268; ESP32 Monitor</h1>
-<p class="subtitle">Raspberry Pi Empfangsserver &bull; aktualisiert alle 5s</p>
+    <h1>&#128421;&#65039; ESP32 Monitor - Übersicht</h1>
+    <p class="timestamp">Letzte Aktualisierung: {{ now }} &nbsp;|&nbsp; Auto-Refresh alle 5 Sekunden</p>
 
-<!-- Zusammenfassung -->
-<div class="cards">
-  <div class="summary-card">
-    <div class="summary-card-title">&#128268; Boards gesamt</div>
-    <div class="summary-card-value col-total">{{ boards|length }}</div>
-  </div>
-  <div class="summary-card">
-    <div class="summary-card-title">&#128994; Online</div>
-    <div class="summary-card-value col-online">{{ boards.values()|selectattr('online')|list|length }}</div>
-  </div>
-  <div class="summary-card">
-    <div class="summary-card-title">&#128308; Offline</div>
-    <div class="summary-card-value col-offline">{{ boards.values()|rejectattr('online')|list|length }}</div>
-  </div>
-  <div class="summary-card">
-    <div class="summary-card-title">&#128235; Nachrichten</div>
-    <div class="summary-card-value col-total">{{ anzahl }}</div>
-  </div>
-</div>
+    <!-- ==================== WASSER-MONITOR ==================== -->
     <h2 class="water">&#128167; Wasser-Monitor (LJ18A3 Induktiv)</h2>
-  <!-- Online/Offline Status -->
+    {% if devices_lj18a3 %}
+    <table>
         <tr>
+            <th>IP-Adresse</th>
             <th>Uptime</th>
             <th>Verbrauch Gesamt</th>
             <th>Verbrauch Session</th>
@@ -290,6 +175,7 @@ HTML_TEMPLATE = """
             <th>Display</th>
             <th>Letztes Update</th>
         </tr>
+        {% for ip, d in devices_lj18a3.items() %}
         <tr>
             <td>
                 <a href="http://{{ ip }}" target="_blank" style="color:#00ff99;">{{ ip }}</a>
@@ -299,35 +185,30 @@ HTML_TEMPLATE = """
             <td class="value-green">{{ "%.1f"|format(d.liter_gesamt) }} L</td>
             <td>{{ "%.1f"|format(d.liter_session) }} L</td>
             <td>{{ d.impulse_gesamt }}</td>
-  <div class="card status {{ 'offline' if offline else 'online' }}">
+            <td class="{{ 'value-warn' if d.batterie_v < 12.0 else 'value-ok' }}">
                 {{ "%.2f"|format(d.batterie_v) }} V
             </td>
-    <div class="card-title">Status</div>
-    <div class="card-value">
+            <td class="value-purple">v{{ d.firmware }}</td>
+            <!-- Display-Status: AN (grün) oder AUS (grau) -->
+            {% if d.display_an %}
                 <td style="color:#00ff99; font-weight:bold;">&#128994; AN</td>
             {% else %}
                 <td style="color:#888;">&#9898; AUS</td>
             {% endif %}
-      <span class="dot"></span>
-      {{ 'OFFLINE' if offline else 'ONLINE' }}
-    </div>
-      <span class="board-title">ESP32 &mdash; {{ board.name }}</span>
-      <span class="board-ip">{{ ip }}</span>
-    <div class="card-sub">
-      {% if letzter %}
-        Letztes Signal: {{ letzter.empfangen_um }}
-      {% else %}
-        Noch keine Daten
-      {% endif %}
-
-    <div class="mini-cards">
+            <td class="timestamp">{{ d.last_seen }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p class="no-data">Noch keine Daten von Wasser-Monitor Geräten empfangen...</p>
+    {% endif %}
 
     <!-- ==================== ULTRASCHALL-MONITOR ==================== -->
     <h2>&#128225; Ultraschall-Monitor (HC-SR04)</h2>
     {% if devices_schall %}
-  <!-- Uptime -->
-  <div class="card uptime">
-    <div class="card-title">&#9201; ESP32 Uptime</div>
+    <table>
+        <tr>
+            <th>IP-Adresse</th>
             <th>Uptime</th>
             <th>Distanz</th>
             <th>Batterie</th>
@@ -342,18 +223,13 @@ HTML_TEMPLATE = """
                 <a href="http://{{ ip }}" target="_blank" style="color:#00d4ff;">{{ ip }}</a>
                 <span class="badge badge-schall">HC-SR04</span>
             </td>
-    <div class="card-value">{{ letzter.uptime if letzter else '--:--:--' }}</div>
-    <div class="card-sub">seit letztem Neustart</div>
-  </div>
-  <!-- Distanz -->
-  <div class="card distanz">
-    <div class="card-title">&#128268; Distanz</div>
-    <div class="card-value">
-        {% if letzter.distanz_cm == -1 %}
-          Kein Objekt
-        {% else %}
-          {{ letzter.distanz_cm }} cm
-        {% endif %}
+            <td class="value-blue">{{ d.uptime }}</td>
+            <td class="value-blue">
+                {% if d.distanz_cm == -1 %}
+                    <span style="color:#888;">kein Objekt</span>
+                {% else %}
+                    {{ "%.1f"|format(d.distanz_cm) }} cm
+                {% endif %}
             </td>
             <td class="{{ 'value-warn' if d.batterie_v < 12.0 else 'value-ok' }}">
                 {{ "%.2f"|format(d.batterie_v) }} V
@@ -362,47 +238,40 @@ HTML_TEMPLATE = """
             <!-- Display-Status: AN (grün) oder AUS (grau) -->
             {% if d.display_an %}
                 <td style="color:#00ff99; font-weight:bold;">&#128994; AN</td>
-      {% else %}
+            {% else %}
                 <td style="color:#888;">&#9898; AUS</td>
             {% endif %}
             <td class="timestamp">{{ d.last_seen }}</td>
-        -- cm
-      {% endif %}
-    </div>
-  </div>
-  <!-- Batterie -->
-  <div class="card batterie">
-    <div class="card-title">&#128267; Batterie</div>
-    <div class="card-value">{{ '%.2f V' % letzter.batterie_v if letzter else '-- V' }}</div>
-          {{ '%.2f' % board.batterie_v }} V
-        </div>
-    <div class="card-sub">{{ letzter.ladestand if letzter else '' }}</div>
-  </div>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p class="no-data">Noch keine Daten von Ultraschall Geräten empfangen...</p>
+    {% endif %}
 
-  <!-- Display Status -->
-  <div class="card {{ 'display-an' if letzter and letzter.display_an else 'display-aus' }}">
-    <div class="card-title">&#128261; Display</div>
-    <div class="card-value">
+    <!-- ==================== FIRMWARE STATUS ==================== -->
+    <h2 class="firmware">&#128257; Firmware Status</h2>
+    <div class="fw-box">
         <p>
             <strong style="color:#00ff99;">LJ18A3 Firmware:</strong>
             Version <code>{{ fw_lj18a3_ver }}</code> &nbsp;|&nbsp;
             {% if fw_lj18a3_ok %}
                 <span class="fw-ok">&#10003; firmware.bin vorhanden</span>
-      {% if letzter %}
-        {{ 'AN' if letzter.display_an else 'AUS' }}
-      {% else %}
+            {% else %}
+                <span class="fw-miss">&#10005; firmware.bin FEHLT</span>
+            {% endif %}
             &nbsp;|&nbsp; Endpunkte:
             <code>/firmware/lj18a3/version</code>
             <code>/firmware/lj18a3/download</code>
         </p>
-        --
+        <p>
             <strong style="color:#00d4ff;">Schall Firmware:</strong>
             Version <code>{{ fw_schall_ver }}</code> &nbsp;|&nbsp;
             {% if fw_schall_ok %}
                 <span class="fw-ok">&#10003; firmware.bin vorhanden</span>
             {% else %}
                 <span class="fw-miss">&#10005; firmware.bin FEHLT</span>
-      {% endif %}
+            {% endif %}
             &nbsp;|&nbsp; Endpunkte:
             <code>/firmware/schall/version</code>
             <code>/firmware/schall/download</code>
@@ -414,34 +283,25 @@ HTML_TEMPLATE = """
             <code>firmware/schall/version.txt</code>
         </p>
     </div>
-  {% endfor %}
 
-  <!-- Nachrichten Zaehler -->
-  <div class="card">
-    <div class="card-title">&#128235; Nachrichten</div>
-    <div class="card-value" style="color:#a78bfa">{{ anzahl }}</div>
-    <div class="card-sub">insgesamt empfangen</div>
-{% endif %}
-<!-- Nachrichten Tabelle -->
-<h2>&#128203; Letzte Nachrichten</h2>
+    <!-- ==================== NACHRICHTEN LOG ==================== -->
+    <h2>&#128203; Letzte Nachrichten (alle Geräte)</h2>
     <table>
         <tr>
             <th>Zeit</th>
             <th>IP</th>
-        <th>Board IP</th>
             <th>Typ</th>
             <th>Details</th>
             <th>Impulse</th>
             <th>Verbrauch Gesamt</th>
             <th>Verbrauch Session</th>
             <th>Distanz</th>
-        <th>ESP32 IP</th>
+            <th>Batterie</th>
         </tr>
         {% for msg in messages[-20:]|reverse %}
         <tr>
             <td class="timestamp">{{ msg.zeit }}</td>
             <td>{{ msg.ip }}</td>
-        <td><span class="ip-tag">{{ e.ip }}</span></td>
             <!-- Spalte 3: Typ mit Badge -->
             <td>
                 {% if msg.typ == 'LJ18A3' %}
@@ -484,7 +344,7 @@ HTML_TEMPLATE = """
                     <td style="color:#00d4ff;">{{ "%.1f"|format(msg.distanz_cm) }} cm</td>
                 {% endif %}
                 <!-- Spalte 9: Batterie -->
-        <td style="color:#888">{{ e.ip }}</td>
+                {% if msg.batterie_v < 12.0 %}
                     <td class="value-warn">{{ "%.2f"|format(msg.batterie_v) }} V</td>
                 {% else %}
                     <td class="value-ok">{{ "%.2f"|format(msg.batterie_v) }} V</td>
@@ -495,7 +355,7 @@ HTML_TEMPLATE = """
     </table>
 
     <p class="footer">
-  Raspberry Pi ESP32 Monitor v1.3 &bull; Port {{ port }} &bull;
+        Server läuft auf Port 5000 &nbsp;|&nbsp;
         Geräte gesamt: {{ devices_lj18a3|length + devices_schall|length }}
     </p>
 </body>

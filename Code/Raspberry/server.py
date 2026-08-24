@@ -8,6 +8,8 @@
 #  Beide Geräte können gleichzeitig Daten senden.
 #  Webseite zeigt alle Geräte in getrennten Tabellen an.
 #
+#  v2.1 - Online/Offline-Anzeige pro Board (Status-Badge + Summary-Karten)
+#
 #  OTA Firmware Update Endpunkte (GETRENNT pro Typ!):
 #    Schall:  GET /firmware/schall/version   -> aktuelle Version
 #             GET /firmware/schall/download  -> .bin Datei
@@ -24,6 +26,9 @@
 #
 #  Start:  python server.py
 #  Port:   5000
+#
+#  Nach Aenderungen neu starten:
+#    sudo systemctl restart esp32-monitor
 # ============================================================
 
 from flask import Flask, request, jsonify, render_template_string, send_file
@@ -33,6 +38,9 @@ import os
 
 app = Flask(__name__)
 data_lock = threading.Lock()
+
+# Nach wie vielen Sekunden ohne neues Signal gilt ein Board als OFFLINE?
+OFFLINE_SECS = 30
 
 # ============================================================
 #  Firmware Pfade
@@ -56,6 +64,15 @@ def lese_version(pfad):
             return f.read().strip()
     except FileNotFoundError:
         return "0.0"
+
+
+def ist_online(device):
+    """True, wenn das Board innerhalb von OFFLINE_SECS zuletzt gemeldet hat."""
+    letzter_kontakt = device.get("_last_seen_dt")
+    if letzter_kontakt is None:
+        return False
+    delta = (datetime.now() - letzter_kontakt).total_seconds()
+    return delta <= OFFLINE_SECS
 
 # ============================================================
 #  Geräte-Datenspeicher - getrennt nach Sensor-Typ
@@ -153,17 +170,50 @@ HTML_TEMPLATE = """
         }
         .timestamp { color: #888; font-size: 0.8em; }
         .footer { color: #555; font-size: 0.8em; margin-top: 20px; }
+
+        /* ---- Online/Offline Status ---- */
+        .summary { display: flex; gap: 14px; margin: 14px 0 24px; flex-wrap: wrap; }
+        .summary-card { background: #16213e; border-radius: 10px; padding: 12px 22px;
+                        text-align: center; min-width: 120px; }
+        .summary-card .num { font-size: 1.8em; font-weight: bold; display: block; }
+        .summary-card .lbl { font-size: 0.75em; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        .summary-total   .num { color: #a78bfa; }
+        .summary-online  .num { color: #00ff99; }
+        .summary-offline .num { color: #ff6b6b; }
+
+        .status-badge { display: inline-flex; align-items: center; gap: 6px;
+                        padding: 3px 10px; border-radius: 14px; font-size: 0.8em; font-weight: bold; }
+        .status-badge.online  { background: #00ff9922; color: #00ff99; }
+        .status-badge.offline { background: #ff6b6b22; color: #ff6b6b; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .status-badge.online .status-dot  { background: #00ff88; animation: blinken 1.2s infinite; }
+        .status-badge.offline .status-dot { background: #ff6b6b; }
+        @keyframes blinken { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+        tr.device-offline td { opacity: 0.55; }
     </style>
 </head>
 <body>
     <h1>&#128421;&#65039; ESP32 Monitor - Übersicht</h1>
-    <p class="timestamp">Letzte Aktualisierung: {{ now }} &nbsp;|&nbsp; Auto-Refresh alle 5 Sekunden</p>
+    <p class="timestamp">Letzte Aktualisierung: {{ now }} &nbsp;|&nbsp; Auto-Refresh alle 5 Sekunden &nbsp;|&nbsp; Offline nach {{ offline_secs }}s ohne Signal</p>
+
+    <div class="summary">
+        <div class="summary-card summary-total">
+            <span class="num">{{ anzahl_gesamt }}</span><span class="lbl">Boards gesamt</span>
+        </div>
+        <div class="summary-card summary-online">
+            <span class="num">{{ anzahl_online }}</span><span class="lbl">Online</span>
+        </div>
+        <div class="summary-card summary-offline">
+            <span class="num">{{ anzahl_offline }}</span><span class="lbl">Offline</span>
+        </div>
+    </div>
 
     <!-- ==================== WASSER-MONITOR ==================== -->
     <h2 class="water">&#128167; Wasser-Monitor (LJ18A3 Induktiv)</h2>
     {% if devices_lj18a3 %}
     <table>
         <tr>
+            <th>Status</th>
             <th>IP-Adresse</th>
             <th>Uptime</th>
             <th>Verbrauch Gesamt</th>
@@ -176,7 +226,15 @@ HTML_TEMPLATE = """
             <th>Letztes Update</th>
         </tr>
         {% for ip, d in devices_lj18a3.items() %}
-        <tr>
+        <tr class="{{ 'device-offline' if not d.online else '' }}">
+            <!-- Spalte: Online/Offline Status -->
+            <td>
+                {% if d.online %}
+                <span class="status-badge online"><span class="status-dot"></span>ONLINE</span>
+                {% else %}
+                <span class="status-badge offline"><span class="status-dot"></span>OFFLINE</span>
+                {% endif %}
+            </td>
             <td>
                 <a href="http://{{ ip }}" target="_blank" style="color:#00ff99;">{{ ip }}</a>
                 <span class="badge badge-wasser">LJ18A3</span>
@@ -208,6 +266,7 @@ HTML_TEMPLATE = """
     {% if devices_schall %}
     <table>
         <tr>
+            <th>Status</th>
             <th>IP-Adresse</th>
             <th>Uptime</th>
             <th>Distanz</th>
@@ -218,7 +277,15 @@ HTML_TEMPLATE = """
             <th>Letztes Update</th>
         </tr>
         {% for ip, d in devices_schall.items() %}
-        <tr>
+        <tr class="{{ 'device-offline' if not d.online else '' }}">
+            <!-- Spalte: Online/Offline Status -->
+            <td>
+                {% if d.online %}
+                <span class="status-badge online"><span class="status-dot"></span>ONLINE</span>
+                {% else %}
+                <span class="status-badge offline"><span class="status-dot"></span>OFFLINE</span>
+                {% endif %}
+            </td>
             <td>
                 <a href="http://{{ ip }}" target="_blank" style="color:#00d4ff;">{{ ip }}</a>
                 <span class="badge badge-schall">HC-SR04</span>
@@ -312,7 +379,7 @@ HTML_TEMPLATE = """
             </td>
             <!-- Spalte 4: Details als kompakter Text -->
             <td style="font-size: 0.85em; color: #aaa;">{{ msg.details }}</td>
-            
+
             {% if msg.typ == 'LJ18A3' %}
                 <!-- LJ18A3: Wasserverbrauch-Felder befüllen; Distanz ist nicht vorhanden (—) -->
                 <!-- Spalte 5: Impulse -->
@@ -392,7 +459,8 @@ def empfange_daten():
                     # display_an: True = Display AN, False = Display AUS
                     # Standardwert True falls das Feld im JSON fehlt (Abwaertskompatibilitaet)
                     'display_an':     bool(daten.get('display_an', True)),
-                    'last_seen':      now_str
+                    'last_seen':      now_str,
+                    '_last_seen_dt':  datetime.now(),
                 }
                 details = (f"Liter: {daten.get('liter_gesamt', 0):.1f} L | "
                            f"Session: {daten.get('liter_session', 0):.1f} L | "
@@ -411,7 +479,8 @@ def empfange_daten():
                     # display_an: True = Display AN, False = Display AUS
                     # Standardwert True falls das Feld im JSON fehlt (Abwaertskompatibilitaet)
                     'display_an': bool(daten.get('display_an', True)),
-                    'last_seen':  now_str
+                    'last_seen':  now_str,
+                    '_last_seen_dt': datetime.now(),
                 }
                 details = (f"Distanz: {daten.get('distanz_cm', -1)} cm | "
                            f"Batt: {daten.get('batterie_v', 0):.2f}V | "
@@ -419,7 +488,7 @@ def empfange_daten():
 
             # Nachrichten-Log
             if sensor_typ == 'LJ18A3':
-                # LJ18A3: Wasserverbrauch-Felder befüllen; Distanz nicht vorhanden → -1
+                # LJ18A3: Wasserverbrauch-Felder befüllen; Distanz nicht vorhanden -> -1
                 messages.append({
                     'zeit':           now_str,
                     'ip':             ip,
@@ -432,7 +501,7 @@ def empfange_daten():
                     'batterie_v':     float(daten.get('batterie_v', 0)),     # Batteriespannung in Volt
                 })
             else:
-                # HC-SR04: Distanz + Batterie befüllen; Wasserverbrauch nicht vorhanden → 0
+                # HC-SR04: Distanz + Batterie befüllen; Wasserverbrauch nicht vorhanden -> 0
                 messages.append({
                     'zeit':           now_str,
                     'ip':             ip,
@@ -503,16 +572,37 @@ def fw_lj18a3_download():
 @app.route('/')
 def webseite():
     with data_lock:
+        # Online/Offline-Status frisch berechnen (beim Anzeigen, nicht beim Empfang!)
+        devices_lj18a3_anzeige = {}
+        for ip, d in devices_lj18a3.items():
+            d2 = dict(d)
+            d2['online'] = ist_online(d)
+            devices_lj18a3_anzeige[ip] = d2
+
+        devices_schall_anzeige = {}
+        for ip, d in devices_schall.items():
+            d2 = dict(d)
+            d2['online'] = ist_online(d)
+            devices_schall_anzeige[ip] = d2
+
+        alle_geraete   = list(devices_lj18a3_anzeige.values()) + list(devices_schall_anzeige.values())
+        anzahl_online  = sum(1 for d in alle_geraete if d['online'])
+        anzahl_offline = len(alle_geraete) - anzahl_online
+
         return render_template_string(
             HTML_TEMPLATE,
-            devices_lj18a3 = dict(devices_lj18a3),
-            devices_schall = dict(devices_schall),
+            devices_lj18a3 = devices_lj18a3_anzeige,
+            devices_schall = devices_schall_anzeige,
             messages       = list(messages),
             now            = datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
             fw_lj18a3_ver  = lese_version(FW_LJ18A3_VER),
             fw_schall_ver  = lese_version(FW_SCHALL_VER),
             fw_lj18a3_ok   = os.path.exists(FW_LJ18A3_BIN),
             fw_schall_ok   = os.path.exists(FW_SCHALL_BIN),
+            anzahl_gesamt  = len(alle_geraete),
+            anzahl_online  = anzahl_online,
+            anzahl_offline = anzahl_offline,
+            offline_secs   = OFFLINE_SECS,
         )
 
 

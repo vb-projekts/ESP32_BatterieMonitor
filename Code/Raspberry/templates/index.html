@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}ESP32 Monitor - Uebersicht{% endblock %}
+
+{% block content %}
+    <h1>&#128421;&#65039; ESP32 Monitor - Uebersicht</h1>
+    <p class="timestamp">
+        Letzte Aktualisierung: <span id="last-updated">--</span>
+        &nbsp;|&nbsp; <span id="refresh-indicator" class="live-dot"></span> Live (kein Neuladen noetig)
+        &nbsp;|&nbsp; Offline nach <span id="offline-secs">--</span>s ohne Signal
+    </p>
+
+    <div class="summary">
+        <div class="summary-card summary-total">
+            <span class="num" id="summary-gesamt">--</span><span class="lbl">Boards gesamt</span>
+        </div>
+        <div class="summary-card summary-online">
+            <span class="num" id="summary-online">--</span><span class="lbl">Online</span>
+        </div>
+        <div class="summary-card summary-offline">
+            <span class="num" id="summary-offline">--</span><span class="lbl">Offline</span>
+        </div>
+    </div>
+
+    <h2 class="water">&#128167; Wasser-Monitor (LJ18A3 Induktiv)</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Status</th><th>IP-Adresse</th><th>Uptime</th><th>Verbrauch Gesamt</th>
+            <th>Verbrauch Session</th><th>Impulse</th><th>Batterie</th><th>Firmware</th>
+            <th>Display</th><th>Letztes Update</th>
+        </tr>
+        </thead>
+        <tbody id="water-tbody">
+            <tr><td colspan="10" class="no-data">Lade Daten...</td></tr>
+        </tbody>
+    </table>
+
+    <h2>&#128225; Ultraschall-Monitor (HC-SR04)</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Status</th><th>IP-Adresse</th><th>Uptime</th><th>Distanz</th>
+            <th>Batterie</th><th>Firmware</th><th>Display</th><th>Letztes Update</th>
+        </tr>
+        </thead>
+        <tbody id="schall-tbody">
+            <tr><td colspan="8" class="no-data">Lade Daten...</td></tr>
+        </tbody>
+    </table>
+
+    <h2 class="firmware">&#128257; Firmware Status</h2>
+    <div class="fw-box" id="firmware-box">
+        <p class="no-data">Lade Daten...</p>
+    </div>
+
+    <h2>&#128203; Letzte Nachrichten (alle Geraete)</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Zeit</th><th>IP</th><th>Typ</th><th>Details</th><th>Impulse</th>
+            <th>Verbrauch Gesamt</th><th>Verbrauch Session</th><th>Distanz</th><th>Batterie</th>
+        </tr>
+        </thead>
+        <tbody id="messages-tbody">
+            <tr><td colspan="9" class="no-data">Lade Daten...</td></tr>
+        </tbody>
+    </table>
+
+    <p class="footer">
+        Server laeuft auf Port 5000 &nbsp;|&nbsp;
+        Geraete gesamt: <span id="footer-count">--</span>
+    </p>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

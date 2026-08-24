@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}ESP32 Monitor{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <!-- ============================================================
+         Navigation - zentrale Stelle fuer alle Seiten.
+         Neue Seite hinzufuegen = 1) Route in server.py, 2) Template
+         das "base.html" erweitert, 3) hier einen <a> Eintrag ergaenzen.
+         Aktive Seite wird automatisch per request.path markiert.
+    ============================================================ -->
+    <nav class="topnav">
+        <div class="nav-links">
+            <a href="/" class="{{ 'active' if request.path == '/' else '' }}">&#128421;&#65039; Uebersicht</a>
+            <!-- Beispiel fuer eine kuenftige Seite:
+            <a href="/einstellungen" class="{{ 'active' if request.path == '/einstellungen' else '' }}">&#9881;&#65039; Einstellungen</a>
+            -->
+        </div>
+        <span class="version-tag" id="version-tag">v{{ server_version }}</span>
+    </nav>
+
+    <div class="page-content">
+        {% block content %}{% endblock %}
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

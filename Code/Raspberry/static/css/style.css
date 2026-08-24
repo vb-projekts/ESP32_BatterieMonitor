@@ -1,0 +1,124 @@
+* { box-sizing: border-box; }
+body {
+    font-family: Arial, sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    margin: 20px;
+}
+h1 { color: #00d4ff; }
+h2 { color: #00d4ff; margin-top: 30px; border-bottom: 1px solid #00d4ff; padding-bottom: 5px; }
+h2.water { color: #00ff99; border-bottom-color: #00ff99; }
+h2.firmware { color: #a78bfa; border-bottom-color: #a78bfa; }
+
+/* ---- Navigation (Grundgeruest fuer weitere Seiten) ---- */
+.topnav {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 6px; margin-bottom: 10px;
+}
+.nav-links { display: flex; gap: 6px; }
+.topnav a {
+    color: #aaa; text-decoration: none; padding: 8px 16px;
+    border-radius: 8px 8px 0 0; font-size: 0.9em; font-weight: bold;
+    background: #16213e;
+}
+.topnav a.active { color: #00d4ff; background: #0f3460; }
+.topnav a:hover { color: #fff; }
+.version-tag {
+    color: #555; font-size: 0.8em; font-family: monospace; padding: 0 8px;
+}
+
+/* Gemeinsamer Wrapper fuer den Seiteninhalt (aus base.html) */
+.page-content { max-width: 1200px; margin: 0 auto; }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    background: #16213e;
+    border-radius: 8px;
+    overflow: hidden;
+}
+th {
+    background: #0f3460;
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 0.85em;
+    color: #aaa;
+}
+td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #0f3460;
+    font-size: 0.95em;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #1e3a5f; }
+
+.value-blue  { color: #00d4ff; font-weight: bold; }
+.value-green { color: #00ff99; font-weight: bold; }
+.value-warn  { color: #ff6b6b; font-weight: bold; }
+.value-ok    { color: #00ff99; }
+.value-purple { color: #a78bfa; font-weight: bold; }
+
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    font-weight: bold;
+}
+.badge-schall { background: #0f3460; color: #00d4ff; }
+.badge-wasser { background: #0f4030; color: #00ff99; }
+
+.fw-box {
+    background: #16213e;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-top: 10px;
+    border-left: 4px solid #a78bfa;
+    font-size: 0.9em;
+}
+.fw-box code {
+    background: #0f3460;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: #a78bfa;
+}
+.fw-ok   { color: #00ff99; }
+.fw-miss { color: #ff6b6b; }
+
+.no-data {
+    color: #555;
+    font-style: italic;
+    padding: 15px;
+    text-align: center;
+}
+.timestamp { color: #888; font-size: 0.8em; }
+.footer { color: #555; font-size: 0.8em; margin-top: 20px; }
+
+/* ---- Live-Update Indikator (ersetzt den alten <meta refresh>) ---- */
+.live-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #00ff88; animation: blinken 1.2s infinite;
+}
+.live-dot.live-dot-error { background: #ff6b6b; animation: none; }
+
+/* ---- Online/Offline Status ---- */
+.summary { display: flex; gap: 14px; margin: 14px 0 24px; flex-wrap: wrap; }
+.summary-card { background: #16213e; border-radius: 10px; padding: 12px 22px;
+                text-align: center; min-width: 120px; }
+.summary-card .num { font-size: 1.8em; font-weight: bold; display: block; }
+.summary-card .lbl { font-size: 0.75em; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+.summary-total   .num { color: #a78bfa; }
+.summary-online  .num { color: #00ff99; }
+.summary-offline .num { color: #ff6b6b; }
+
+.status-badge { display: inline-flex; align-items: center; gap: 6px;
+                padding: 3px 10px; border-radius: 14px; font-size: 0.8em; font-weight: bold; }
+.status-badge.online  { background: #00ff9922; color: #00ff99; }
+.status-badge.offline { background: #ff6b6b22; color: #ff6b6b; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status-badge.online .status-dot  { background: #00ff88; animation: blinken 1.2s infinite; }
+.status-badge.offline .status-dot { background: #ff6b6b; }
+@keyframes blinken { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+tr.device-offline td { opacity: 0.55; }

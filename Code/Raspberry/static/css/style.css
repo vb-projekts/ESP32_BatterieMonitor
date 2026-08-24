@@ -122,3 +122,44 @@ tr:hover td { background: #1e3a5f; }
 .status-badge.offline .status-dot { background: #ff6b6b; }
 @keyframes blinken { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 tr.device-offline td { opacity: 0.55; }
+
+/* ---- Wasserverbrauch-Seite: Meter-Karten mit rotierendem "Wasserrad" ---- */
+.meter-card {
+    background: #16213e;
+    border-radius: 14px;
+    padding: 18px 22px;
+    margin-bottom: 18px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.35);
+}
+.meter-card.device-offline { opacity: 0.55; }
+.meter-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.meter-ip { font-family: monospace; color: #888; font-size: 0.85em; }
+.meter-body { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+.meter-wheel-wrap { flex: 0 0 auto; }
+.meter-wheel { width: 110px; height: 110px; }
+.wheel-ring { fill: none; stroke: #0f3460; stroke-width: 4; }
+.wheel-star {
+    fill: #00d4ff;
+    transform-origin: 50px 50px;
+    transform-box: fill-box;
+}
+.wheel-star.spinning {
+    animation-name: spin-wheel;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+}
+@keyframes spin-wheel {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+.meter-numbers { display: flex; gap: 28px; flex-wrap: wrap; flex: 1 1 auto; }
+.meter-num-block { text-align: center; min-width: 110px; }
+.meter-num-value { display: block; font-size: 1.6em; font-weight: bold; }
+.meter-num-label {
+    display: block; font-size: 0.7em; color: #888; text-transform: uppercase;
+    letter-spacing: 1px; margin-top: 2px;
+}
+.meter-footer {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid #0f3460;
+    font-size: 0.8em; color: #888;
+}

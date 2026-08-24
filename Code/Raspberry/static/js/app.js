@@ -1,34 +1,11 @@
 // ============================================================
-//  ESP32 Monitor - Frontend Logik
+//  ESP32 Monitor - Frontend Logik (Uebersichtsseite "/")
 //  Holt Daten per fetch() von /api/status und aktualisiert die
 //  Seite ohne kompletten Reload (kein <meta http-equiv="refresh"> mehr).
+//  Gemeinsame Helfer (escapeHtml, statusBadge, ...) kommen aus common.js.
 // ============================================================
 
 const REFRESH_MS = 3000; // alle 3 Sekunden neu abfragen
-
-function escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = String(text);
-    return div.innerHTML;
-}
-
-function statusBadge(online) {
-    if (online) {
-        return '<span class="status-badge online"><span class="status-dot"></span>ONLINE</span>';
-    }
-    return '<span class="status-badge offline"><span class="status-dot"></span>OFFLINE</span>';
-}
-
-function displayBadge(displayAn) {
-    if (displayAn) {
-        return '<span style="color:#00ff99; font-weight:bold;">&#128994; AN</span>';
-    }
-    return '<span style="color:#888;">&#9898; AUS</span>';
-}
-
-function batterieClass(v) {
-    return v < 12.0 ? "value-warn" : "value-ok";
-}
 
 function renderSummary(summary) {
     document.getElementById("summary-gesamt").textContent = summary.gesamt;
@@ -161,12 +138,6 @@ function renderMessages(messages) {
     tbody.innerHTML = html;
 }
 
-function setLiveIndicator(ok) {
-    const dot = document.getElementById("refresh-indicator");
-    if (!dot) return;
-    dot.classList.toggle("live-dot-error", !ok);
-}
-
 function fetchStatus() {
     fetch("/api/status")
         .then(function (response) {
@@ -187,11 +158,11 @@ function fetchStatus() {
             renderSchallTable(data.devices_schall);
             renderFirmware(data.firmware);
             renderMessages(data.messages);
-            setLiveIndicator(true);
+            setLiveIndicator("refresh-indicator", true);
         })
         .catch(function (err) {
             console.error("Fehler beim Abrufen von /api/status:", err);
-            setLiveIndicator(false);
+            setLiveIndicator("refresh-indicator", false);
         });
 }
 

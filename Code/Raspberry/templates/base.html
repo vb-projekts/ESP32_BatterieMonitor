@@ -17,6 +17,7 @@
     <nav class="topnav">
         <div class="nav-links">
             <a href="/" class="{{ 'active' if request.path == '/' else '' }}">&#128421;&#65039; Uebersicht</a>
+            <a href="/wasser" class="{{ 'active' if request.path == '/wasser' else '' }}">&#128167; Wasserverbrauch</a>
             <!-- Beispiel fuer eine kuenftige Seite:
             <a href="/einstellungen" class="{{ 'active' if request.path == '/einstellungen' else '' }}">&#9881;&#65039; Einstellungen</a>
             -->
@@ -28,6 +29,9 @@
         {% block content %}{% endblock %}
     </div>
 
+    <!-- Gemeinsame Helfer (escapeHtml, statusBadge, ...) fuer ALLE Seiten,
+         danach folgt das seitenspezifische Skript ueber den scripts-Block weiter unten -->
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

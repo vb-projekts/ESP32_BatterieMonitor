@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}ESP32 Monitor - Wasserverbrauch{% endblock %}
+
+{% block content %}
+    <h1>&#128167; Wasserverbrauch</h1>
+    <p class="timestamp">
+        Letzte Aktualisierung: <span id="wasser-last-updated">--</span>
+        &nbsp;|&nbsp; <span id="wasser-refresh-indicator" class="live-dot"></span> Live (kein Neuladen noetig)
+    </p>
+
+    <div class="summary">
+        <div class="summary-card summary-total">
+            <span class="num" id="wasser-summary-gesamt">--</span><span class="lbl">Gesamt (alle Geraete)</span>
+        </div>
+        <div class="summary-card summary-online">
+            <span class="num" id="wasser-summary-session">--</span><span class="lbl">Diese Session</span>
+        </div>
+        <div class="summary-card summary-offline">
+            <span class="num" id="wasser-summary-durchfluss">--</span><span class="lbl">Durchfluss L/min</span>
+        </div>
+    </div>
+
+    <div id="meter-cards">
+        <p class="no-data">Lade Daten...</p>
+    </div>
+
+    <!-- ============================================================
+         VERLAUF - folgt in einer der naechsten Ausbaustufen:
+         Stundengenauer Verlauf + Tag/Woche/Monat als Diagramm.
+         Geplant: eigener Endpunkt fuer Zeitreihen-Daten + Chart.js
+         zum Zeichnen. Container-ID ist hier schon vorbereitet.
+    ============================================================ -->
+    <h2 class="firmware">&#128200; Verbrauch im Verlauf</h2>
+    <div class="fw-box">
+        <p class="no-data">
+            Stundengenauer Verlauf sowie Tag-/Wochen-/Monatsansicht folgen in einer
+            der naechsten Ausbaustufen.
+        </p>
+        <!-- <canvas id="verbrauch-chart"></canvas> -->
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ url_for('static', filename='js/wasser.js') }}"></script>
+{% endblock %}

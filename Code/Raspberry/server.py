@@ -7,6 +7,8 @@
 #
 #  v2.2 - Frontend auf fetch()-Polling umgestellt (kein <meta refresh> mehr!)
 #         HTML/CSS/JS liegen jetzt in templates/ und static/ (siehe unten).
+#  v2.4 - Neue Seite /wasser (Wasserverbrauch + rotierende Wasseruhr),
+#         Durchfluss-Berechnung (L/min), eigener Endpunkt /api/wasser.
 #
 #  Struktur:
 #    server.py
@@ -53,7 +55,7 @@ OFFLINE_SECS = 30
 
 # Server-Version, wird in der Web-UI angezeigt (Nav-Leiste), damit man
 # beim Aktualisieren der Dateien auf dem Pi den Ueberblick behaelt.
-SERVER_VERSION = "2.3"
+SERVER_VERSION = "2.4"
 
 # ============================================================
 #  Firmware Pfade
@@ -115,22 +117,39 @@ def empfange_daten():
         now_str    = datetime.now().strftime("%H:%M:%S")
         sensor_typ = daten.get("sensor_typ", "HC-SR04")
 
+        jetzt = datetime.now()
+
         with data_lock:
             if sensor_typ == "LJ18A3":
+                # Durchfluss (L/min) aus der Differenz zum letzten Messwert berechnen.
+                # Notwendig, weil das Board nur den Zaehlerstand (liter_gesamt) sendet,
+                # keine Momentan-Fliessgeschwindigkeit.
+                vorheriges = devices_lj18a3.get(ip)
+                neuer_liter_gesamt = float(daten.get("liter_gesamt", 0))
+                durchfluss_l_min = 0.0
+                if vorheriges is not None:
+                    delta_liter = neuer_liter_gesamt - vorheriges.get("liter_gesamt", 0.0)
+                    delta_sek   = (jetzt - vorheriges.get("_last_seen_dt", jetzt)).total_seconds()
+                    # negative Delta (z.B. Zaehler-Reset nach Neustart) ignorieren
+                    if delta_sek > 0 and delta_liter >= 0:
+                        durchfluss_l_min = round((delta_liter / delta_sek) * 60.0, 3)
+
                 devices_lj18a3[ip] = {
-                    "uptime":         daten.get("uptime", "--"),
-                    "uptime_ms":      daten.get("uptime_ms", 0),
-                    "liter_gesamt":   float(daten.get("liter_gesamt", 0)),
-                    "liter_session":  float(daten.get("liter_session", 0)),
-                    "impulse_gesamt": int(daten.get("impulse_gesamt", 0)),
-                    "batterie_v":     float(daten.get("batterie_v", 0)),
-                    "firmware":       daten.get("firmware", "?"),
-                    "display_an":     bool(daten.get("display_an", True)),
-                    "last_seen":      now_str,
-                    "_last_seen_dt":  datetime.now(),
+                    "uptime":           daten.get("uptime", "--"),
+                    "uptime_ms":        daten.get("uptime_ms", 0),
+                    "liter_gesamt":     neuer_liter_gesamt,
+                    "liter_session":    float(daten.get("liter_session", 0)),
+                    "impulse_gesamt":   int(daten.get("impulse_gesamt", 0)),
+                    "batterie_v":       float(daten.get("batterie_v", 0)),
+                    "firmware":         daten.get("firmware", "?"),
+                    "display_an":       bool(daten.get("display_an", True)),
+                    "durchfluss_l_min": durchfluss_l_min,
+                    "last_seen":        now_str,
+                    "_last_seen_dt":    jetzt,
                 }
-                details = (f"Liter: {daten.get('liter_gesamt', 0):.1f} L | "
+                details = (f"Liter: {neuer_liter_gesamt:.1f} L | "
                            f"Session: {daten.get('liter_session', 0):.1f} L | "
+                           f"Durchfluss: {durchfluss_l_min:.2f} L/min | "
                            f"Batt: {daten.get('batterie_v', 0):.2f}V | "
                            f"FW: v{daten.get('firmware', '?')}")
             else:
@@ -184,24 +203,37 @@ def empfange_daten():
 
 
 # ============================================================
+#  Hilfsfunktionen: Geraete-Dicts in JSON-taugliche Listen umwandeln
+#  (gemeinsam genutzt von /api/status UND /api/wasser)
+# ============================================================
+def _lj18a3_liste():
+    liste = []
+    for ip, d in devices_lj18a3.items():
+        d2 = {k: v for k, v in d.items() if k != "_last_seen_dt"}
+        d2["ip"] = ip
+        d2["online"] = ist_online(d)
+        liste.append(d2)
+    return liste
+
+
+def _schall_liste():
+    liste = []
+    for ip, d in devices_schall.items():
+        d2 = {k: v for k, v in d.items() if k != "_last_seen_dt"}
+        d2["ip"] = ip
+        d2["online"] = ist_online(d)
+        liste.append(d2)
+    return liste
+
+
+# ============================================================
 #  API Endpunkt - aktueller Status fuer das Frontend (JS-Polling)
 # ============================================================
 @app.route("/api/status")
 def api_status():
     with data_lock:
-        devices_lj18a3_liste = []
-        for ip, d in devices_lj18a3.items():
-            d2 = {k: v for k, v in d.items() if k != "_last_seen_dt"}
-            d2["ip"] = ip
-            d2["online"] = ist_online(d)
-            devices_lj18a3_liste.append(d2)
-
-        devices_schall_liste = []
-        for ip, d in devices_schall.items():
-            d2 = {k: v for k, v in d.items() if k != "_last_seen_dt"}
-            d2["ip"] = ip
-            d2["online"] = ist_online(d)
-            devices_schall_liste.append(d2)
+        devices_lj18a3_liste = _lj18a3_liste()
+        devices_schall_liste = _schall_liste()
 
         alle = devices_lj18a3_liste + devices_schall_liste
         anzahl_gesamt  = len(alle)
@@ -225,6 +257,30 @@ def api_status():
                 "schall": {"version": lese_version(FW_SCHALL_VER), "ok": os.path.exists(FW_SCHALL_BIN)},
             },
             "messages": letzte_nachrichten,
+            "server_version": SERVER_VERSION,
+        })
+
+
+# ============================================================
+#  API Endpunkt - Wasserverbrauch-Seite (eigener, schlanker Endpunkt)
+# ============================================================
+@app.route("/api/wasser")
+def api_wasser():
+    with data_lock:
+        geraete = _lj18a3_liste()
+        gesamt_liter   = sum(d["liter_gesamt"] for d in geraete)
+        session_liter  = sum(d["liter_session"] for d in geraete)
+        durchfluss_sum = sum(d.get("durchfluss_l_min", 0.0) for d in geraete)
+
+        return jsonify({
+            "now":          datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
+            "offline_secs": OFFLINE_SECS,
+            "geraete": geraete,
+            "summary": {
+                "liter_gesamt":     round(gesamt_liter, 1),
+                "liter_session":    round(session_liter, 1),
+                "durchfluss_l_min": round(durchfluss_sum, 3),
+            },
             "server_version": SERVER_VERSION,
         })
 
@@ -268,12 +324,17 @@ def fw_lj18a3_download():
 
 
 # ============================================================
-#  Webseite - liefert nur noch das leere HTML-Geruest,
-#  Daten kommen per JS ueber /api/status
+#  Webseiten - liefern nur das leere HTML-Geruest,
+#  Daten kommen per JS ueber /api/status bzw. /api/wasser
 # ============================================================
 @app.route("/")
 def webseite():
     return render_template("index.html")
+
+
+@app.route("/wasser")
+def wasser_seite():
+    return render_template("wasser.html")
 
 
 # ============================================================

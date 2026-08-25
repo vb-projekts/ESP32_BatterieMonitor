@@ -9,6 +9,8 @@
 #         HTML/CSS/JS liegen jetzt in templates/ und static/ (siehe unten).
 #  v2.4 - Neue Seite /wasser (Wasserverbrauch + rotierende Wasseruhr),
 #         Durchfluss-Berechnung (L/min), eigener Endpunkt /api/wasser.
+#  v2.5 - SQLite-Datenhaltung (wasserdb-Paket): Rohdaten 14 Tage, Rollup
+#         zu Stunde/Tag/Woche(Mo-So)/Monat, Endpunkt /api/wasser/verlauf.
 #
 #  Struktur:
 #    server.py
@@ -37,11 +39,21 @@ from datetime import datetime
 import threading
 import os
 
+from wasserdb import init_db
+from wasserdb.rollup import starte_rollup_thread
+from wasserdb.queries import insert_messwert, liste_geraete_ips, hole_verlauf
+
 # Flask findet templates/ und static/ automatisch, weil sie direkt
 # neben server.py liegen (Standard-Konvention, explizit hier notiert
 # damit es beim Erweitern - z.B. weitere Seiten - klar bleibt).
 app = Flask(__name__, template_folder="templates", static_folder="static")
 data_lock = threading.Lock()
+
+# SQLite-Datenhaltung fuer den Wasserverbrauch: Tabellen anlegen (falls noch
+# nicht vorhanden) und den Rollup-Hintergrundjob starten (Stunde/Tag/Woche/
+# Monat aggregieren, Rohdaten aelter als 14 Tage aufraeumen).
+init_db()
+starte_rollup_thread()
 
 
 @app.context_processor
@@ -55,7 +67,7 @@ OFFLINE_SECS = 30
 
 # Server-Version, wird in der Web-UI angezeigt (Nav-Leiste), damit man
 # beim Aktualisieren der Dateien auf dem Pi den Ueberblick behaelt.
-SERVER_VERSION = "2.4"
+SERVER_VERSION = "2.5"
 
 # ============================================================
 #  Firmware Pfade
@@ -147,6 +159,9 @@ def empfange_daten():
                     "last_seen":        now_str,
                     "_last_seen_dt":    jetzt,
                 }
+                # Rohdaten-Messwert fuer die spaetere stunden-/tage-/wochen-/
+                # monatsweise Auswertung in SQLite speichern (wasserdb-Paket)
+                insert_messwert(ip, neuer_liter_gesamt)
                 details = (f"Liter: {neuer_liter_gesamt:.1f} L | "
                            f"Session: {daten.get('liter_session', 0):.1f} L | "
                            f"Durchfluss: {durchfluss_l_min:.2f} L/min | "
@@ -283,6 +298,38 @@ def api_wasser():
             },
             "server_version": SERVER_VERSION,
         })
+
+
+# ============================================================
+#  API Endpunkt - Verbrauchsverlauf (Stunde/Tag/Woche/Monat) fuers Diagramm
+# ============================================================
+@app.route("/api/wasser/verlauf")
+def api_wasser_verlauf():
+    ip = request.args.get("ip")
+    zeitraum = request.args.get("zeitraum", "tag")
+    try:
+        anzahl = int(request.args.get("anzahl", 30))
+    except ValueError:
+        anzahl = 30
+
+    if not ip:
+        # Keine IP angegeben -> erstes bekanntes Geraet verwenden
+        geraete = liste_geraete_ips()
+        if not geraete:
+            return jsonify({"ip": None, "zeitraum": zeitraum, "labels": [], "werte": []})
+        ip = geraete[0]
+
+    try:
+        daten = hole_verlauf(ip, zeitraum, anzahl=anzahl)
+    except ValueError as e:
+        return jsonify({"fehler": str(e)}), 400
+
+    return jsonify({
+        "ip": ip,
+        "zeitraum": zeitraum,
+        "labels": [d["label"] for d in daten],
+        "werte":  [d["liter"] for d in daten],
+    })
 
 
 # ============================================================

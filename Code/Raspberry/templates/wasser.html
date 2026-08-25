@@ -21,26 +21,30 @@
         </div>
     </div>
 
+    <!-- Karten sind klickbar: anklicken waehlt das Geraet fuer das
+         Diagramm unten aus (sichtbar am blauen Rahmen + Augen-Symbol) -->
     <div id="meter-cards">
         <p class="no-data">Lade Daten...</p>
     </div>
 
     <!-- ============================================================
-         VERLAUF - folgt in einer der naechsten Ausbaustufen:
-         Stundengenauer Verlauf + Tag/Woche/Monat als Diagramm.
-         Geplant: eigener Endpunkt fuer Zeitreihen-Daten + Chart.js
-         zum Zeichnen. Container-ID ist hier schon vorbereitet.
+         VERLAUF - Diagramm (Chart.js), Zeitraum umschaltbar,
+         zeigt das per Klick auf eine meter-card ausgewaehlte Geraet.
     ============================================================ -->
     <h2 class="firmware">&#128200; Verbrauch im Verlauf</h2>
+    <div class="chart-controls">
+        <button type="button" class="zeitraum-btn active" data-zeitraum="stunde">Stunde</button>
+        <button type="button" class="zeitraum-btn" data-zeitraum="tag">Tag</button>
+        <button type="button" class="zeitraum-btn" data-zeitraum="woche">Woche</button>
+        <button type="button" class="zeitraum-btn" data-zeitraum="monat">Monat</button>
+        <span class="chart-geraet-label" id="chart-geraet-label"></span>
+    </div>
     <div class="fw-box">
-        <p class="no-data">
-            Stundengenauer Verlauf sowie Tag-/Wochen-/Monatsansicht folgen in einer
-            der naechsten Ausbaustufen.
-        </p>
-        <!-- <canvas id="verbrauch-chart"></canvas> -->
+        <canvas id="verbrauch-chart" height="90"></canvas>
     </div>
 {% endblock %}
 
 {% block scripts %}
+    <script src="{{ url_for('static', filename='js/vendor/chart.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/wasser.js') }}"></script>
 {% endblock %}

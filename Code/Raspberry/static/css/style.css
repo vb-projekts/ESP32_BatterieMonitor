@@ -164,3 +164,39 @@ tr.device-offline td { opacity: 0.55; }
     margin-top: 14px; padding-top: 12px; border-top: 1px solid #0f3460;
     font-size: 0.8em; color: #888;
 }
+
+/* ---- Klick-Auswahl der meter-card (fuers Diagramm) ---- */
+.meter-card {
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color .15s, box-shadow .15s;
+    position: relative;
+}
+.meter-card:hover { border-color: #0f346099; }
+.meter-card.selected {
+    border-color: #00d4ff;
+    box-shadow: 0 0 0 1px #00d4ff33;
+}
+.meter-card .eye-badge {
+    position: absolute; top: -12px; right: 16px;
+    background: #00d4ff; color: #0a1128; font-size: 0.75em; font-weight: bold;
+    padding: 3px 10px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    display: none;
+}
+.meter-card.selected .eye-badge { display: inline-block; }
+.meter-hint {
+    margin-top: 8px; font-size: 0.7em; color: #555; text-align: right;
+    font-style: italic;
+}
+
+/* ---- Verlaufs-Diagramm ---- */
+.chart-controls { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; flex-wrap: wrap; }
+.zeitraum-btn {
+    background: #16213e; color: #aaa; border: 1px solid #0f3460;
+    border-radius: 8px; padding: 6px 16px; font-size: 0.85em; font-weight: bold;
+    cursor: pointer; transition: all .15s;
+}
+.zeitraum-btn:hover { color: #fff; border-color: #00d4ff; }
+.zeitraum-btn.active { background: #0f3460; color: #00d4ff; border-color: #00d4ff; }
+.chart-geraet-label { margin-left: auto; color: #888; font-size: 0.85em; font-family: monospace; }
+#verbrauch-chart { max-height: 320px; }

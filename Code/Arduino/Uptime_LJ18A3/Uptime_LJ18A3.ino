@@ -35,7 +35,7 @@
 //    v1.4 - Kalibrierungsfaktor per Webseite einstellbar
 //    v1.5 - OTA Update-Funktion via Raspberry Pi (HTTPUpdate)
 //    v1.6 - Sendeintervall 10s -> 2s (zeitnahere Verbrauchsanzeige)
-//    v1.7 - JSON angepasst impulseSession + liter_session raus (waren immer identisch mit Gesamt)
+//    v1.7 - Redundanten impulseSession/liter_session-Zähler entfernt (war immer identisch zu liter_gesamt), lokale Webseite bereinigt
 // ================================================================
 
 #include <Arduino.h>

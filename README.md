@@ -489,34 +489,6 @@ ESP/
 - **Firmware-Änderungen an der `.ino`** müssen über die Arduino IDE (USB oder OTA) neu geflasht
   werden — ein reiner `server.py`-Neustart reicht dafür NICHT aus
 
-## 🔒 Vor dem Upload zu GitHub
-
-- [ ] WLAN-Zugangsdaten (`ssid`/`password`) in beiden `.ino`-Dateien wieder durch Platzhalter ersetzen
-- [ ] `ADMIN_PASSWORT` in `server.py` nicht mit echtem Passwort committen
-- [ ] `data/` (SQLite-Datenbank) und `firmware/` (OTA-Binaries) per `.gitignore` ausschließen
-- [ ] Ggf. `server_url`/`VERSION_URL`/`FIRMWARE_URL` (enthalten deine private Pi-IP) prüfen, ob sie
-      veröffentlicht werden sollen
-
-Beispiel `.gitignore`:
-```
-data/
-firmware/
-__pycache__/
-*.pyc
-.vscode/
-```
-
----
-
-## 📚 Dokumentation
-
-Eine vollständige Projektdokumentation (Word-Dokument) mit allen Schaltplänen,
-Lötanleitungen, Einkaufslisten und Code-Erklärungen befindet sich unter:
-
-```
-OnlineMeasurer/Dokumentation.docx
-```
-
 ---
 
 *Projekt erstellt August 2026 · Multi-Sensor-Erweiterung (Wasserverbrauch, SQLite, Admin-Panel) August 2026*

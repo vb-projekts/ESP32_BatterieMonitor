@@ -11,6 +11,8 @@
 #         Durchfluss-Berechnung (L/min), eigener Endpunkt /api/wasser.
 #  v2.5 - SQLite-Datenhaltung (wasserdb-Paket): Rohdaten 14 Tage, Rollup
 #         zu Stunde/Tag/Woche(Mo-So)/Monat, Endpunkt /api/wasser/verlauf.
+#  v2.6 - Kalibrierbarer Lebenszeit-Gesamtverbrauch, passwortgeschuetzte
+#         Admin-Seite (/admin), redundantes Session-Feld entfernt.
 #
 #  Struktur:
 #    server.py
@@ -34,26 +36,45 @@
 #    sudo systemctl restart esp32-monitor
 # ============================================================
 
-from flask import Flask, request, jsonify, render_template, send_file
+from flask import Flask, request, jsonify, render_template, send_file, session, redirect, url_for
 from datetime import datetime
 import threading
 import os
+import secrets
 
 from wasserdb import init_db
 from wasserdb.rollup import starte_rollup_thread
-from wasserdb.queries import insert_messwert, liste_geraete_ips, hole_verlauf
+from wasserdb.queries import (
+    insert_messwert,
+    liste_geraete_ips,
+    hole_verlauf,
+    hole_lebenszeit_verbrauch,
+    kalibriere_lebenszeit,
+)
 
 # Flask findet templates/ und static/ automatisch, weil sie direkt
 # neben server.py liegen (Standard-Konvention, explizit hier notiert
 # damit es beim Erweitern - z.B. weitere Seiten - klar bleibt).
 app = Flask(__name__, template_folder="templates", static_folder="static")
+# Fuer die Admin-Login-Session (Flask signiert das Session-Cookie damit).
+# Wird bei jedem Neustart neu erzeugt -> vorhandene Logins muessen sich nach
+# einem Neustart des Servers erneut anmelden. Fuer ein Heimnetz ausreichend.
+app.secret_key = secrets.token_hex(32)
 data_lock = threading.Lock()
+
+# ACHTUNG: Vor dem produktiven Einsatz aendern! Schuetzt die Admin-Seite
+# (/admin), auf der sich der Gesamtverbrauch-Zaehler kalibrieren laesst.
+ADMIN_PASSWORT = "aendere-mich"
 
 # SQLite-Datenhaltung fuer den Wasserverbrauch: Tabellen anlegen (falls noch
 # nicht vorhanden) und den Rollup-Hintergrundjob starten (Stunde/Tag/Woche/
 # Monat aggregieren, Rohdaten aelter als 14 Tage aufraeumen).
 init_db()
 starte_rollup_thread()
+
+
+def ist_admin_eingeloggt():
+    return session.get("ist_admin", False) is True
 
 
 @app.context_processor
@@ -67,7 +88,7 @@ OFFLINE_SECS = 30
 
 # Server-Version, wird in der Web-UI angezeigt (Nav-Leiste), damit man
 # beim Aktualisieren der Dateien auf dem Pi den Ueberblick behaelt.
-SERVER_VERSION = "2.5"
+SERVER_VERSION = "2.6"
 
 # ============================================================
 #  Firmware Pfade
@@ -150,7 +171,6 @@ def empfange_daten():
                     "uptime":           daten.get("uptime", "--"),
                     "uptime_ms":        daten.get("uptime_ms", 0),
                     "liter_gesamt":     neuer_liter_gesamt,
-                    "liter_session":    float(daten.get("liter_session", 0)),
                     "impulse_gesamt":   int(daten.get("impulse_gesamt", 0)),
                     "batterie_v":       float(daten.get("batterie_v", 0)),
                     "firmware":         daten.get("firmware", "?"),
@@ -160,10 +180,11 @@ def empfange_daten():
                     "_last_seen_dt":    jetzt,
                 }
                 # Rohdaten-Messwert fuer die spaetere stunden-/tage-/wochen-/
-                # monatsweise Auswertung in SQLite speichern (wasserdb-Paket)
+                # monatsweise Auswertung in SQLite speichern (wasserdb-Paket).
+                # Aktualisiert dabei automatisch auch den kalibrierbaren
+                # Lebenszeit-Zaehler (siehe wasserdb.queries).
                 insert_messwert(ip, neuer_liter_gesamt)
                 details = (f"Liter: {neuer_liter_gesamt:.1f} L | "
-                           f"Session: {daten.get('liter_session', 0):.1f} L | "
                            f"Durchfluss: {durchfluss_l_min:.2f} L/min | "
                            f"Batt: {daten.get('batterie_v', 0):.2f}V | "
                            f"FW: v{daten.get('firmware', '?')}")
@@ -190,7 +211,6 @@ def empfange_daten():
                     "details":        details,
                     "impulse_gesamt": int(daten.get("impulse_gesamt", 0)),
                     "liter_gesamt":   float(daten.get("liter_gesamt", 0)),
-                    "liter_session":  float(daten.get("liter_session", 0)),
                     "distanz_cm":     -1,
                     "batterie_v":     float(daten.get("batterie_v", 0)),
                 })
@@ -202,7 +222,6 @@ def empfange_daten():
                     "details":        details,
                     "impulse_gesamt": 0,
                     "liter_gesamt":   0.0,
-                    "liter_session":  0.0,
                     "distanz_cm":     float(daten.get("distanz_cm", -1)),
                     "batterie_v":     float(daten.get("batterie_v", 0)),
                 })
@@ -227,6 +246,7 @@ def _lj18a3_liste():
         d2 = {k: v for k, v in d.items() if k != "_last_seen_dt"}
         d2["ip"] = ip
         d2["online"] = ist_online(d)
+        d2["liter_lebenszeit"] = hole_lebenszeit_verbrauch(ip)
         liste.append(d2)
     return liste
 
@@ -283,8 +303,8 @@ def api_status():
 def api_wasser():
     with data_lock:
         geraete = _lj18a3_liste()
-        gesamt_liter   = sum(d["liter_gesamt"] for d in geraete)
-        session_liter  = sum(d["liter_session"] for d in geraete)
+        lebenszeit_gesamt   = sum(d["liter_lebenszeit"] for d in geraete)
+        seit_neustart_gesamt = sum(d["liter_gesamt"] for d in geraete)
         durchfluss_sum = sum(d.get("durchfluss_l_min", 0.0) for d in geraete)
 
         return jsonify({
@@ -292,9 +312,9 @@ def api_wasser():
             "offline_secs": OFFLINE_SECS,
             "geraete": geraete,
             "summary": {
-                "liter_gesamt":     round(gesamt_liter, 1),
-                "liter_session":    round(session_liter, 1),
-                "durchfluss_l_min": round(durchfluss_sum, 3),
+                "liter_lebenszeit":    round(lebenszeit_gesamt, 1),
+                "liter_seit_neustart": round(seit_neustart_gesamt, 1),
+                "durchfluss_l_min":    round(durchfluss_sum, 3),
             },
             "server_version": SERVER_VERSION,
         })
@@ -368,6 +388,51 @@ def fw_lj18a3_download():
                      mimetype="application/octet-stream",
                      as_attachment=True,
                      download_name="firmware_lj18a3.bin")
+
+
+# ============================================================
+#  Admin-Seite - Kalibrierung des Lebenszeit-Gesamtverbrauchs.
+#  Passwortgeschuetzt ueber eine simple Session (siehe ADMIN_PASSWORT).
+# ============================================================
+@app.route("/admin", methods=["GET"])
+def admin_seite():
+    if not ist_admin_eingeloggt():
+        return render_template("admin_login.html")
+    with data_lock:
+        geraete = _lj18a3_liste()
+    return render_template("admin.html", geraete=geraete)
+
+
+@app.route("/admin/login", methods=["POST"])
+def admin_login():
+    passwort = request.form.get("passwort", "")
+    if passwort == ADMIN_PASSWORT:
+        session["ist_admin"] = True
+        return redirect(url_for("admin_seite"))
+    return render_template("admin_login.html", fehler="Falsches Passwort.")
+
+
+@app.route("/admin/logout", methods=["GET", "POST"])
+def admin_logout():
+    session.pop("ist_admin", None)
+    return redirect(url_for("admin_seite"))
+
+
+@app.route("/admin/kalibrieren", methods=["POST"])
+def admin_kalibrieren():
+    if not ist_admin_eingeloggt():
+        return redirect(url_for("admin_seite"))
+
+    ip = request.form.get("ip")
+    try:
+        neuer_wert = float(request.form.get("neuer_wert", "").replace(",", "."))
+    except ValueError:
+        neuer_wert = None
+
+    if ip and neuer_wert is not None:
+        kalibriere_lebenszeit(ip, neuer_wert)
+
+    return redirect(url_for("admin_seite"))
 
 
 # ============================================================

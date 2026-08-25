@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}ESP32 Monitor - Admin{% endblock %}
+
+{% block content %}
+    <h1>&#9881;&#65039; Admin-Login</h1>
+    <p class="timestamp">Zugang zur Kalibrierung des Gesamtverbrauchs</p>
+
+    <div class="fw-box admin-login-box">
+        {% if fehler %}
+        <p style="color:#ff6b6b; font-weight:bold;">{{ fehler }}</p>
+        {% endif %}
+        <form method="POST" action="/admin/login">
+            <div class="admin-login-row">
+                <label for="passwort">Passwort:</label>
+                <input type="password" id="passwort" name="passwort" required autofocus>
+                <button type="submit" class="btn-kali">Anmelden</button>
+            </div>
+        </form>
+    </div>
+{% endblock %}

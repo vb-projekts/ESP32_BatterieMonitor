@@ -34,4 +34,12 @@ SCHEMA_STATEMENTS = [
         PRIMARY KEY (ip, monat)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS lebenszeit_verbrauch (
+        ip TEXT PRIMARY KEY,
+        gesamt_liter REAL NOT NULL,
+        letzter_bekannter_wert REAL,
+        letzter_zeitstempel TEXT
+    )
+    """,
 ]

@@ -1,5 +1,5 @@
 // ============================================================
-//  ESP32 Monitor - Frontend Logik (Uebersichtsseite "/")
+//  ESP32 Monitor - Frontend Logik (Übersichtsseite "/")
 //  Holt Daten per fetch() von /api/status und aktualisiert die
 //  Seite ohne kompletten Reload (kein <meta http-equiv="refresh"> mehr).
 //  Gemeinsame Helfer (escapeHtml, statusBadge, ...) kommen aus common.js.
@@ -17,7 +17,7 @@ function renderSummary(summary) {
 function renderWaterTable(devices) {
     const tbody = document.getElementById("water-tbody");
     if (!devices || devices.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" class="no-data">Noch keine Daten von Wasser-Monitor Geraeten empfangen...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="no-data">Noch keine Daten von Wasser-Monitor Geräten empfangen...</td></tr>';
         return;
     }
     let html = "";
@@ -27,8 +27,8 @@ function renderWaterTable(devices) {
         html += "<td>" + statusBadge(d.online) + "</td>";
         html += '<td><a href="http://' + escapeHtml(d.ip) + '" target="_blank" style="color:#00ff99;">' + escapeHtml(d.ip) + '</a> <span class="badge badge-wasser">LJ18A3</span></td>';
         html += '<td class="value-green">' + escapeHtml(d.uptime) + "</td>";
-        html += '<td class="value-green">' + d.liter_gesamt.toFixed(1) + " L</td>";
-        html += "<td>" + d.liter_session.toFixed(1) + " L</td>";
+        html += '<td class="value-green">' + d.liter_lebenszeit.toFixed(1) + " L</td>";
+        html += "<td>" + d.liter_gesamt.toFixed(1) + " L</td>";
         html += "<td>" + d.impulse_gesamt + "</td>";
         html += '<td class="' + batterieClass(d.batterie_v) + '">' + d.batterie_v.toFixed(2) + " V</td>";
         html += '<td class="value-purple">v' + escapeHtml(d.firmware) + "</td>";
@@ -42,7 +42,7 @@ function renderWaterTable(devices) {
 function renderSchallTable(devices) {
     const tbody = document.getElementById("schall-tbody");
     if (!devices || devices.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="no-data">Noch keine Daten von Ultraschall Geraeten empfangen...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="no-data">Noch keine Daten von Ultraschall Geräten empfangen...</td></tr>';
         return;
     }
     let html = "";
@@ -104,7 +104,7 @@ function renderFirmware(fw) {
 function renderMessages(messages) {
     const tbody = document.getElementById("messages-tbody");
     if (!messages || messages.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="no-data">Noch keine Daten empfangen...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="no-data">Noch keine Daten empfangen...</td></tr>';
         return;
     }
     let html = "";
@@ -120,11 +120,9 @@ function renderMessages(messages) {
         if (m.typ === "LJ18A3") {
             html += '<td style="color:#00ff99;">' + m.impulse_gesamt + "</td>";
             html += '<td style="color:#00ff99; font-weight:bold;">' + m.liter_gesamt.toFixed(1) + " L</td>";
-            html += '<td style="color:#aaa;">' + m.liter_session.toFixed(1) + " L</td>";
             html += '<td style="color:#555;">&#8212;</td>';
             html += '<td class="' + batterieClass(m.batterie_v) + '">' + m.batterie_v.toFixed(2) + " V</td>";
         } else {
-            html += '<td style="color:#555;">&#8212;</td>';
             html += '<td style="color:#555;">&#8212;</td>';
             html += '<td style="color:#555;">&#8212;</td>';
             const distanz = m.distanz_cm === -1

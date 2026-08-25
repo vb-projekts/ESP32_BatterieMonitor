@@ -13,6 +13,72 @@ def insert_messwert(ip, liter_gesamt, zeitstempel=None):
             "INSERT INTO messwerte (ip, zeitstempel, liter_gesamt) VALUES (?, ?, ?)",
             (ip, zeitstempel, liter_gesamt),
         )
+        _aktualisiere_lebenszeit(conn, ip, liter_gesamt, zeitstempel)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _aktualisiere_lebenszeit(conn, ip, neuer_wert, zeitstempel):
+    """Schreibt die Differenz zum letzten bekannten Wert auf den
+    Lebenszeit-Zaehler drauf (reset-sicher, wie beim Stunden-Rollup).
+    Wird bei jedem insert_messwert() automatisch mit aufgerufen."""
+    row = conn.execute(
+        "SELECT gesamt_liter, letzter_bekannter_wert FROM lebenszeit_verbrauch WHERE ip = ?",
+        (ip,),
+    ).fetchone()
+
+    if row is None:
+        # Erstes Mal fuer dieses Geraet: Startwert = aktueller ESP-Wert.
+        # Falls der physische Zaehler schon vorher einen Stand hatte,
+        # kann das ueber die Admin-Seite (/admin) nachtraeglich kalibriert werden.
+        conn.execute(
+            "INSERT INTO lebenszeit_verbrauch (ip, gesamt_liter, letzter_bekannter_wert, letzter_zeitstempel) "
+            "VALUES (?, ?, ?, ?)",
+            (ip, neuer_wert, neuer_wert, zeitstempel),
+        )
+        return
+
+    delta = neuer_wert - row["letzter_bekannter_wert"]
+    if delta < 0:
+        delta = neuer_wert  # Zaehler-Reset erkannt: neuen Wert komplett addieren
+    neuer_gesamt = row["gesamt_liter"] + delta
+    conn.execute(
+        "UPDATE lebenszeit_verbrauch SET gesamt_liter = ?, letzter_bekannter_wert = ?, "
+        "letzter_zeitstempel = ? WHERE ip = ?",
+        (neuer_gesamt, neuer_wert, zeitstempel, ip),
+    )
+
+
+def hole_lebenszeit_verbrauch(ip):
+    """Liefert den kalibrierten Lebenszeit-Gesamtverbrauch (uebersteht ESP-Neustarts)."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT gesamt_liter FROM lebenszeit_verbrauch WHERE ip = ?", (ip,)
+        ).fetchone()
+        return row["gesamt_liter"] if row else 0.0
+    finally:
+        conn.close()
+
+
+def kalibriere_lebenszeit(ip, neuer_gesamtwert):
+    """Setzt den Lebenszeit-Zaehler manuell (z.B. weil der physische
+    Wasserzaehler schon vor der Digitalisierung einen Stand hatte).
+    Ab sofort wird ab diesem Wert wieder normal weitergezaehlt."""
+    conn = get_connection()
+    try:
+        zeile = conn.execute(
+            "SELECT liter_gesamt FROM messwerte WHERE ip = ? ORDER BY id DESC LIMIT 1", (ip,)
+        ).fetchone()
+        aktueller_esp_wert = zeile["liter_gesamt"] if zeile else 0.0
+        jetzt = datetime.now().isoformat(timespec="seconds")
+
+        conn.execute(
+            "INSERT OR REPLACE INTO lebenszeit_verbrauch "
+            "(ip, gesamt_liter, letzter_bekannter_wert, letzter_zeitstempel) VALUES (?, ?, ?, ?)",
+            (ip, neuer_gesamtwert, aktueller_esp_wert, jetzt),
+        )
         conn.commit()
     finally:
         conn.close()

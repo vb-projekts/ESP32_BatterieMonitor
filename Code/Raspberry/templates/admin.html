@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}ESP32 Monitor - Admin{% endblock %}
+
+{% block content %}
+    <h1>&#9881;&#65039; Admin</h1>
+    <p class="timestamp">
+        Eingeloggt &nbsp;|&nbsp; <a href="/admin/logout" style="color:#ff6b6b;">Abmelden</a>
+    </p>
+
+    <h2 class="firmware">&#128167; Gesamtverbrauch kalibrieren</h2>
+    <div class="fw-box">
+        <p class="no-data" style="text-align:left; font-style:normal; padding:0 0 16px 0;">
+            Dein physischer Wasserzähler startet nicht bei 0 - hier kannst du den
+            Gesamtverbrauch-Zähler pro Gerät auf den tatsächlichen Zählerstand setzen.
+            Ab diesem Wert wird ganz normal weitergezählt (auch über künftige
+            ESP32-Neustarts hinweg).
+        </p>
+
+        {% if geraete %}
+        {% for g in geraete %}
+        <div class="admin-geraet-box">
+            <div class="admin-geraet-header">
+                <span class="badge badge-wasser">LJ18A3</span>
+                <span class="meter-ip">{{ g.ip }}</span>
+            </div>
+            <div class="admin-geraet-werte">
+                <div>Aktueller Gesamtverbrauch (DB): <strong class="value-green">{{ "%.1f"|format(g.liter_lebenszeit) }} L</strong></div>
+                <div>Seit Neustart (ESP): <strong>{{ "%.1f"|format(g.liter_gesamt) }} L</strong></div>
+            </div>
+            <form method="POST" action="/admin/kalibrieren" class="admin-kali-form">
+                <input type="hidden" name="ip" value="{{ g.ip }}">
+                <label>Setze Gesamtverbrauch auf:</label>
+                <input type="number" step="0.1" name="neuer_wert" placeholder="z.B. 15234.0" required>
+                <span>L</span>
+                <button type="submit" class="btn-kali">&#10003; Kalibrieren</button>
+            </form>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="no-data">Noch keine Geräte bekannt.</p>
+        {% endif %}
+    </div>
+{% endblock %}

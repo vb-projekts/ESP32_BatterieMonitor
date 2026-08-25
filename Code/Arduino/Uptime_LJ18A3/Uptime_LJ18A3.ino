@@ -35,6 +35,7 @@
 //    v1.4 - Kalibrierungsfaktor per Webseite einstellbar
 //    v1.5 - OTA Update-Funktion via Raspberry Pi (HTTPUpdate)
 //    v1.6 - Sendeintervall 10s -> 2s (zeitnahere Verbrauchsanzeige)
+//    v1.7 - JSON angepasst impulseSession + liter_session raus (waren immer identisch mit Gesamt)
 // ================================================================
 
 #include <Arduino.h>
@@ -63,7 +64,7 @@ const unsigned long SEND_INTERVAL = 2000;
 // ================================================================
 //  FIRMWARE VERSION
 // ================================================================
-#define FIRMWARE_VERSION "1.6"
+#define FIRMWARE_VERSION "1.7"
 #define FIRMWARE_TYP     "LJ18A3"
 
 // ================================================================
@@ -98,7 +99,6 @@ float kaliFaktor = 1.05;
 #define LITER_PRO_IMPULS 1.0   // 1 Impuls = 1 Liter (Diehl Altair Ti)
 
 volatile unsigned long impulseGesamt  = 0;
-volatile unsigned long impulseSession = 0;
 volatile unsigned long lastImpulsMs   = 0;
 
 // ================================================================
@@ -130,7 +130,6 @@ void IRAM_ATTR onSensorPulse() {
   unsigned long now = millis();
   if ((now - lastImpulsMs) > DEBOUNCE_MS) {
     impulseGesamt++;
-    impulseSession++;
     lastImpulsMs = now;
   }
 }
@@ -149,7 +148,6 @@ float messeBatterie() {
 }
 
 float getLiterGesamt()  { return impulseGesamt  * LITER_PRO_IMPULS; }
-float getLiterSession() { return impulseSession * LITER_PRO_IMPULS; }
 
 String ladestandText(float v) {
   if (v >= 12.7) return "100% - Voll";
@@ -272,7 +270,6 @@ void sendeAnServer() {
   http.addHeader("Content-Type", "application/json");
 
   float litGes = getLiterGesamt();
-  float litSes = getLiterSession();
 
   String json = "{";
   json += "\"uptime\":\"" + uptimeString() + "\",";
@@ -280,7 +277,6 @@ void sendeAnServer() {
   json += "\"sensor_typ\":\"LJ18A3\",";
   json += "\"impulse_gesamt\":" + String(impulseGesamt) + ",";
   json += "\"liter_gesamt\":"   + String(litGes, 1) + ",";
-  json += "\"liter_session\":"  + String(litSes, 1) + ",";
   json += "\"batterie_v\":"     + String(battSpannung, 2) + ",";
   json += "\"display_an\":"     + String(displayAn ? "true" : "false") + ",";
   json += "\"kali_faktor\":"    + String(kaliFaktor, 4) + ",";
@@ -304,7 +300,6 @@ void handleRoot() {
   String uptimeStr = uptimeString();
 
   String litGesStr = String(getLiterGesamt(), 1) + " L";
-  String litSesStr = String(getLiterSession(), 1) + " L";
   String impStr    = String(impulseGesamt);
 
   // Kali-Status nur 5 Sekunden anzeigen
@@ -385,22 +380,13 @@ void handleRoot() {
 
     <!-- Wasserverbrauch Gesamt -->
     <div class="card wasser">
-      <div class="card-title">&#128167; Verbrauch Gesamt</div>
+      <div class="card-title">&#128167; Seit Neustart</div>
       <div class="card-value">)rawhtml";
   html += litGesStr;
   html += R"rawhtml(</div>
       <div class="card-sub">)rawhtml";
   html += impStr + " Impulse";
   html += R"rawhtml(</div>
-    </div>
-
-    <!-- Wasserverbrauch Session -->
-    <div class="card session">
-      <div class="card-title">&#9203; Diese Session</div>
-      <div class="card-value">)rawhtml";
-  html += litSesStr;
-  html += R"rawhtml(</div>
-      <div class="card-sub">seit Neustart</div>
     </div>
 
     <!-- Uptime -->
@@ -464,7 +450,7 @@ void handleRoot() {
     <h3>&#9881; Batterie Kalibrierung</h3>
     <p class="kali-info">
       Multimeter-Wert eingeben &rarr; Kalibrierungsfaktor wird automatisch berechnet.
-      Kein Neu-Flashen noetig!
+      Kein Neu-Flashen nötig!
     </p>
     <form action="/kalibrierung" method="GET">
       <div class="kali-row">
@@ -499,7 +485,7 @@ void handleRoot() {
   html += WiFi.localIP().toString();
   html += R"rawhtml( &bull; LJ18A3 Induktiv &bull; v)rawhtml";
   html += FIRMWARE_VERSION;
-  html += R"rawhtml( &bull; Sendet alle 10s an Raspberry Pi</div>
+  html += R"rawhtml( &bull; Sendet alle 2s an Raspberry Pi</div>
 </body>
 </html>)rawhtml";
 
@@ -579,9 +565,8 @@ void loop() {
 
     String uptimeStr = uptimeString();
     String ipStr     = WiFi.localIP().toString();
-    char bufGes[20], bufSes[20];
+    char bufGes[20];
     snprintf(bufGes, sizeof(bufGes), "Ges: %.1f L", getLiterGesamt());
-    snprintf(bufSes, sizeof(bufSes), "Ses: %.1f L", getLiterSession());
 
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_ncenB08_tr);
@@ -591,7 +576,6 @@ void loop() {
     // Wasserverbrauch
     u8g2.setFont(u8g2_font_6x10_tr);
     u8g2.drawStr(0, 27, bufGes);
-    u8g2.drawStr(0, 38, bufSes);
 
     // Batterie
     char bufBatt[20];

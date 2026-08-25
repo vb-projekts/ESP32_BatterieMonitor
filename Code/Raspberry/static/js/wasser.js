@@ -32,7 +32,7 @@ function baueMeterKarte(d, index) {
 
     let html = "";
     html += '<div class="meter-card ' + rowClass + (istAusgewaehlt ? " selected" : "") + '" data-ip="' + escapeHtml(d.ip) + '">';
-    html += '<span class="eye-badge">&#128065; Ausgewaehlt</span>';
+    html += '<span class="eye-badge">&#128065; Ausgewählt</span>';
     html += '<div class="meter-card-header">';
     html += statusBadge(d.online);
     html += '<span class="meter-ip"><a href="http://' + escapeHtml(d.ip) + '" target="_blank" style="color:#00ff99;">' + escapeHtml(d.ip) + '</a></span>';
@@ -52,12 +52,12 @@ function baueMeterKarte(d, index) {
 
     html += '<div class="meter-numbers">';
     html += '<div class="meter-num-block">';
-    html += '<span class="meter-num-value value-green">' + d.liter_gesamt.toFixed(1) + ' L</span>';
+    html += '<span class="meter-num-value value-green">' + d.liter_lebenszeit.toFixed(1) + ' L</span>';
     html += '<span class="meter-num-label">Gesamtverbrauch</span>';
     html += '</div>';
     html += '<div class="meter-num-block">';
-    html += '<span class="meter-num-value">' + d.liter_session.toFixed(1) + ' L</span>';
-    html += '<span class="meter-num-label">Diese Session</span>';
+    html += '<span class="meter-num-value">' + d.liter_gesamt.toFixed(1) + ' L</span>';
+    html += '<span class="meter-num-label">Seit Neustart</span>';
     html += '</div>';
     html += '<div class="meter-num-block">';
     html += '<span class="meter-num-value value-purple">' + durchfluss.toFixed(2) + ' L/min</span>';
@@ -72,7 +72,7 @@ function baueMeterKarte(d, index) {
     html += ' &nbsp;|&nbsp; Display: ' + displayBadge(d.display_an);
     html += ' &nbsp;|&nbsp; Letztes Update: ' + escapeHtml(d.last_seen);
     html += '</div>';
-    html += '<div class="meter-hint">Zum Auswaehlen fuers Diagramm anklicken</div>';
+    html += '<div class="meter-hint">Zum Auswählen fürs Diagramm anklicken</div>';
     html += '</div>'; // meter-card
 
     return html;
@@ -81,7 +81,7 @@ function baueMeterKarte(d, index) {
 function renderMeterKarten(geraete) {
     const container = document.getElementById("meter-cards");
     if (!geraete || geraete.length === 0) {
-        container.innerHTML = '<p class="no-data">Noch keine Daten von Wasser-Monitor Geraeten empfangen...</p>';
+        container.innerHTML = '<p class="no-data">Noch keine Daten von Wasser-Monitor Geräten empfangen...</p>';
         return;
     }
 
@@ -105,8 +105,8 @@ function renderMeterKarten(geraete) {
 }
 
 function renderWasserSummary(summary) {
-    document.getElementById("wasser-summary-gesamt").textContent = summary.liter_gesamt.toFixed(1) + " L";
-    document.getElementById("wasser-summary-session").textContent = summary.liter_session.toFixed(1) + " L";
+    document.getElementById("wasser-summary-gesamt").textContent = summary.liter_lebenszeit.toFixed(1) + " L";
+    document.getElementById("wasser-summary-neustart").textContent = summary.liter_seit_neustart.toFixed(1) + " L";
     document.getElementById("wasser-summary-durchfluss").textContent = summary.durchfluss_l_min.toFixed(2);
 }
 
@@ -197,7 +197,7 @@ function fetchVerlaufChart() {
             erstelleOderAktualisiereChart(data.labels, data.werte, data.zeitraum, data.ip);
             const label = document.getElementById("chart-geraet-label");
             if (label) {
-                label.textContent = "Geraet: " + data.ip;
+                label.textContent = "Gerät: " + data.ip;
             }
         })
         .catch(function (err) {

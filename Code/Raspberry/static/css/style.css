@@ -200,3 +200,25 @@ tr.device-offline td { opacity: 0.55; }
 .zeitraum-btn.active { background: #0f3460; color: #00d4ff; border-color: #00d4ff; }
 .chart-geraet-label { margin-left: auto; color: #888; font-size: 0.85em; font-family: monospace; }
 #verbrauch-chart { max-height: 320px; }
+
+
+/* ---- Admin-Seite ---- */
+.admin-login-box { max-width: 400px; }
+.admin-login-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.admin-login-row input[type="password"] {
+    background: #0f3460; color: #eee; border: 1px solid #00d4aa; border-radius: 8px;
+    padding: 8px 12px; font-size: 1em;
+}
+.admin-geraet-box { background: #0f3460; border-radius: 12px; padding: 16px 20px; margin-bottom: 14px; }
+.admin-geraet-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.admin-geraet-werte { font-size: 0.9em; color: #ccc; margin-bottom: 12px; display: flex; gap: 24px; flex-wrap: wrap; }
+.admin-kali-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-kali-form input[type="number"] {
+    background: #16213e; color: #eee; border: 1px solid #00d4aa; border-radius: 8px;
+    padding: 6px 10px; width: 140px;
+}
+.btn-kali {
+    background: #e8b86d22; color: #e8b86d; border: 2px solid #e8b86d;
+    border-radius: 10px; padding: 8px 18px; font-weight: bold; cursor: pointer;
+}
+.btn-kali:hover { opacity: .8; }

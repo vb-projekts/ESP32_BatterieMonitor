@@ -10,17 +10,15 @@
 <body>
     <!-- ============================================================
          Navigation - zentrale Stelle fuer alle Seiten.
-         Neue Seite hinzufuegen = 1) Route in server.py, 2) Template
-         das "base.html" erweitert, 3) hier einen <a> Eintrag ergaenzen.
+         Neue Seite hinzufügen = 1) Route in server.py, 2) Template
+         das "base.html" erweitert, 3) hier einen <a> Eintrag ergänzen.
          Aktive Seite wird automatisch per request.path markiert.
     ============================================================ -->
     <nav class="topnav">
         <div class="nav-links">
-            <a href="/" class="{{ 'active' if request.path == '/' else '' }}">&#128421;&#65039; Uebersicht</a>
+            <a href="/" class="{{ 'active' if request.path == '/' else '' }}">&#128421;&#65039; Übersicht</a>
             <a href="/wasser" class="{{ 'active' if request.path == '/wasser' else '' }}">&#128167; Wasserverbrauch</a>
-            <!-- Beispiel fuer eine kuenftige Seite:
-            <a href="/einstellungen" class="{{ 'active' if request.path == '/einstellungen' else '' }}">&#9881;&#65039; Einstellungen</a>
-            -->
+            <a href="/admin" class="{{ 'active' if request.path.startswith('/admin') else '' }}">&#9881;&#65039; Admin</a>
         </div>
         <span class="version-tag" id="version-tag">v{{ server_version }}</span>
     </nav>
@@ -29,8 +27,8 @@
         {% block content %}{% endblock %}
     </div>
 
-    <!-- Gemeinsame Helfer (escapeHtml, statusBadge, ...) fuer ALLE Seiten,
-         danach folgt das seitenspezifische Skript ueber den scripts-Block weiter unten -->
+    <!-- Gemeinsame Helfer (escapeHtml, statusBadge, ...) für ALLE Seiten,
+         danach folgt das seitenspezifische Skript über den scripts-Block weiter unten -->
     <script src="{{ url_for('static', filename='js/common.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>

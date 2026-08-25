@@ -31,10 +31,10 @@ function baueMeterKarte(d, index) {
     const istAusgewaehlt = d.ip === ausgewaehlteIp;
 
     let html = "";
-    html += '<div class="meter-card ' + rowClass + (istAusgewaehlt ? " selected" : "") + '" data-ip="' + escapeHtml(d.ip) + '">';
+    html += '<div class="meter-card ' + rowClass + (istAusgewaehlt ? " selected" : "") + '" data-ip="' + escapeHtml(d.ip) + '" id="meter-card-' + index + '">';
     html += '<span class="eye-badge">&#128065; Ausgewählt</span>';
     html += '<div class="meter-card-header">';
-    html += statusBadge(d.online);
+    html += '<span id="meter-status-' + index + '">' + statusBadge(d.online) + '</span>';
     html += '<span class="meter-ip"><a href="http://' + escapeHtml(d.ip) + '" target="_blank" style="color:#00ff99;">' + escapeHtml(d.ip) + '</a></span>';
     html += '</div>';
 
@@ -52,25 +52,25 @@ function baueMeterKarte(d, index) {
 
     html += '<div class="meter-numbers">';
     html += '<div class="meter-num-block">';
-    html += '<span class="meter-num-value value-green">' + d.liter_lebenszeit.toFixed(1) + ' L</span>';
+    html += '<span class="meter-num-value value-green" id="meter-lebenszeit-' + index + '">' + d.liter_lebenszeit.toFixed(1) + ' L</span>';
     html += '<span class="meter-num-label">Gesamtverbrauch</span>';
     html += '</div>';
     html += '<div class="meter-num-block">';
-    html += '<span class="meter-num-value">' + d.liter_gesamt.toFixed(1) + ' L</span>';
+    html += '<span class="meter-num-value" id="meter-neustart-' + index + '">' + d.liter_gesamt.toFixed(1) + ' L</span>';
     html += '<span class="meter-num-label">Seit Neustart</span>';
     html += '</div>';
     html += '<div class="meter-num-block">';
-    html += '<span class="meter-num-value value-purple">' + durchfluss.toFixed(2) + ' L/min</span>';
+    html += '<span class="meter-num-value value-purple" id="meter-durchfluss-' + index + '">' + durchfluss.toFixed(2) + ' L/min</span>';
     html += '<span class="meter-num-label">Aktueller Durchfluss</span>';
     html += '</div>';
     html += '</div>'; // meter-numbers
     html += '</div>'; // meter-body
 
     html += '<div class="meter-footer">';
-    html += 'Batterie: <span class="' + batterieClass(d.batterie_v) + '">' + d.batterie_v.toFixed(2) + ' V</span>';
-    html += ' &nbsp;|&nbsp; Firmware v' + escapeHtml(d.firmware);
-    html += ' &nbsp;|&nbsp; Display: ' + displayBadge(d.display_an);
-    html += ' &nbsp;|&nbsp; Letztes Update: ' + escapeHtml(d.last_seen);
+    html += 'Batterie: <span id="meter-batterie-' + index + '" class="' + batterieClass(d.batterie_v) + '">' + d.batterie_v.toFixed(2) + ' V</span>';
+    html += ' &nbsp;|&nbsp; Firmware v<span id="meter-firmware-' + index + '">' + escapeHtml(d.firmware) + '</span>';
+    html += ' &nbsp;|&nbsp; Display: <span id="meter-display-' + index + '">' + displayBadge(d.display_an) + '</span>';
+    html += ' &nbsp;|&nbsp; Letztes Update: <span id="meter-lastseen-' + index + '">' + escapeHtml(d.last_seen) + '</span>';
     html += '</div>';
     html += '<div class="meter-hint">Zum Auswählen fürs Diagramm anklicken</div>';
     html += '</div>'; // meter-card
@@ -78,19 +78,73 @@ function baueMeterKarte(d, index) {
     return html;
 }
 
+function setTextIfExists(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
+function aktualisiereMeterKarte(d, index) {
+    // Aktualisiert NUR die Werte einer bereits bestehenden Karte - fasst das
+    // SVG-Wasserrad NICHT an, damit dessen laufende CSS-Animation nicht
+    // neu gestartet wird (sonst "springt" das Rad bei jedem Poll zurueck).
+    const karte = document.getElementById("meter-card-" + index);
+    if (karte) {
+        const istAusgewaehlt = d.ip === ausgewaehlteIp;
+        karte.className = "meter-card" + (d.online ? "" : " device-offline") + (istAusgewaehlt ? " selected" : "");
+    }
+    const statusEl = document.getElementById("meter-status-" + index);
+    if (statusEl) statusEl.innerHTML = statusBadge(d.online);
+
+    const durchfluss = d.durchfluss_l_min || 0;
+    setTextIfExists("meter-lebenszeit-" + index, d.liter_lebenszeit.toFixed(1) + " L");
+    setTextIfExists("meter-neustart-" + index, d.liter_gesamt.toFixed(1) + " L");
+    setTextIfExists("meter-durchfluss-" + index, durchfluss.toFixed(2) + " L/min");
+
+    const battEl = document.getElementById("meter-batterie-" + index);
+    if (battEl) {
+        battEl.textContent = d.batterie_v.toFixed(2) + " V";
+        battEl.className = batterieClass(d.batterie_v);
+    }
+    setTextIfExists("meter-firmware-" + index, d.firmware);
+    const displayEl = document.getElementById("meter-display-" + index);
+    if (displayEl) displayEl.innerHTML = displayBadge(d.display_an);
+    setTextIfExists("meter-lastseen-" + index, d.last_seen);
+}
+
+let letzteGeraeteIps = [];
+
 function renderMeterKarten(geraete) {
     const container = document.getElementById("meter-cards");
     if (!geraete || geraete.length === 0) {
         container.innerHTML = '<p class="no-data">Noch keine Daten von Wasser-Monitor Geräten empfangen...</p>';
+        letzteGeraeteIps = [];
         return;
     }
 
-    let html = "";
-    geraete.forEach(function (d, index) {
-        html += baueMeterKarte(d, index);
-    });
-    container.innerHTML = html;
+    const aktuelleIps = geraete.map(function (d) { return d.ip; });
+    const strukturGleich = aktuelleIps.length === letzteGeraeteIps.length &&
+        aktuelleIps.every(function (ip, i) { return ip === letzteGeraeteIps[i]; });
 
+    if (!strukturGleich) {
+        // Geraete-Liste hat sich geaendert (neues Geraet, weniger Geraete,
+        // andere Reihenfolge) -> komplett neu aufbauen
+        let html = "";
+        geraete.forEach(function (d, index) {
+            html += baueMeterKarte(d, index);
+        });
+        container.innerHTML = html;
+        letzteGeraeteIps = aktuelleIps;
+    } else {
+        // Gleiche Geraete wie beim letzten Mal -> nur Werte aktualisieren,
+        // die bestehenden DOM-Elemente (inkl. Wasserrad) bleiben erhalten
+        geraete.forEach(function (d, index) {
+            aktualisiereMeterKarte(d, index);
+        });
+    }
+
+    // Drehgeschwindigkeit immer aktualisieren - aendert nur animation-duration
+    // auf dem BESTEHENDEN Element, die laufende Animation wird dadurch nicht
+    // neu gestartet, sondern laeuft einfach schneller/langsamer weiter.
     geraete.forEach(function (d, index) {
         const rad = document.getElementById("meter-wheel-" + index);
         if (!rad) return;

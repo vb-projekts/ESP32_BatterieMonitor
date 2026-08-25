@@ -14,6 +14,9 @@
 #  v2.6 - Kalibrierbarer Lebenszeit-Gesamtverbrauch, passwortgeschuetzte
 #         Admin-Seite (/admin), redundantes Session-Feld entfernt.
 #
+#  v2.7 - Durchfluss-Anzeige exponentiell geglaettet (kein Springen mehr
+#         zwischen 0 und Spitzenwert), Wasserrad dreht dadurch weich.
+#
 #  Struktur:
 #    server.py
 #    templates/index.html   -> HTML-Grundgeruest
@@ -86,9 +89,13 @@ def inject_server_version():
 # Nach wie vielen Sekunden ohne neues Signal gilt ein Board als OFFLINE?
 OFFLINE_SECS = 30
 
+# Glaettungsfaktor fuer die Durchfluss-Anzeige (0 < x <= 1).
+# Kleiner = traeger/glatter, groesser = reagiert schneller aber unruhiger.
+DURCHFLUSS_GLAETTUNG = 0.3
+
 # Server-Version, wird in der Web-UI angezeigt (Nav-Leiste), damit man
 # beim Aktualisieren der Dateien auf dem Pi den Ueberblick behaelt.
-SERVER_VERSION = "2.6"
+SERVER_VERSION = "2.7"
 
 # ============================================================
 #  Firmware Pfade
@@ -159,13 +166,27 @@ def empfange_daten():
                 # keine Momentan-Fliessgeschwindigkeit.
                 vorheriges = devices_lj18a3.get(ip)
                 neuer_liter_gesamt = float(daten.get("liter_gesamt", 0))
-                durchfluss_l_min = 0.0
+                momentaner_durchfluss = 0.0
                 if vorheriges is not None:
                     delta_liter = neuer_liter_gesamt - vorheriges.get("liter_gesamt", 0.0)
                     delta_sek   = (jetzt - vorheriges.get("_last_seen_dt", jetzt)).total_seconds()
                     # negative Delta (z.B. Zaehler-Reset nach Neustart) ignorieren
                     if delta_sek > 0 and delta_liter >= 0:
-                        durchfluss_l_min = round((delta_liter / delta_sek) * 60.0, 3)
+                        momentaner_durchfluss = (delta_liter / delta_sek) * 60.0
+
+                # Exponentielle Glaettung: Der Momentanwert (aus nur EINEM Impuls
+                # in einem 2s-Fenster) springt sonst hart zwischen 0 und z.B. 30 L/min.
+                # Statt den Momentanwert direkt zu uebernehmen, wird er nur zu
+                # DURCHFLUSS_GLAETTUNG-Anteil eingerechnet - der Rest kommt vom
+                # zuletzt angezeigten (schon geglaetteten) Wert. Ergebnis: sanftes
+                # Hoch-/Runterlaufen statt Sprung, das Wasserrad dreht dadurch
+                # automatisch weich schneller/langsamer statt abrupt zu stoppen.
+                vorheriger_geglaetteter_wert = vorheriges.get("durchfluss_l_min", 0.0) if vorheriges else 0.0
+                durchfluss_l_min = round(
+                    DURCHFLUSS_GLAETTUNG * momentaner_durchfluss
+                    + (1 - DURCHFLUSS_GLAETTUNG) * vorheriger_geglaetteter_wert,
+                    3,
+                )
 
                 devices_lj18a3[ip] = {
                     "uptime":           daten.get("uptime", "--"),

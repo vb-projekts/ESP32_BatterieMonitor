@@ -7,7 +7,7 @@
 //  batterieClass, setLiveIndicator) kommen aus common.js.
 // ============================================================
 
-const WASSER_REFRESH_MS = 2000;
+const WASSER_REFRESH_MS = 1000; // schnellere Reaktionszeit (vorher 2000ms)
 
 function berechneSpinDauer(lProMin) {
     // Kein spuerbarer Durchfluss -> Rad steht still
@@ -35,8 +35,10 @@ function baueMeterKarte(d, index) {
     html += '<div class="meter-wheel-wrap">';
     html += '<svg viewBox="0 0 100 100" class="meter-wheel">';
     html += '<circle cx="50" cy="50" r="46" class="wheel-ring"></circle>';
+    html += '<g transform="translate(50,50)">';
     html += '<g class="wheel-star" id="' + wheelId + '">';
-    html += '<polygon points="50,8 59,41 92,50 59,59 50,92 41,59 8,50 41,41"></polygon>';
+    html += '<polygon points="0,-42 9,-9 42,0 9,9 0,42 -9,9 -42,0 -9,-9"></polygon>';
+    html += '</g>';
     html += '</g>';
     html += '</svg>';
     html += '</div>';

@@ -34,6 +34,7 @@
 //    v1.3 - Display Ein/Aus Button auf Webseite
 //    v1.4 - Kalibrierungsfaktor per Webseite einstellbar
 //    v1.5 - OTA Update-Funktion via Raspberry Pi (HTTPUpdate)
+//    v1.6 - Sendeintervall 10s -> 2s (zeitnahere Verbrauchsanzeige)
 // ================================================================
 
 #include <Arduino.h>
@@ -55,13 +56,14 @@ const char* serverUrl    = "http://192.168.178.46:5000/api/data";
 const char* VERSION_URL  = "http://192.168.178.46:5000/firmware/lj18a3/version";
 const char* FIRMWARE_URL = "http://192.168.178.46:5000/firmware/lj18a3/download";
 
-// Sendeintervall in Millisekunden (10 Sekunden)
-const unsigned long SEND_INTERVAL = 10000;
+// Sendeintervall in Millisekunden (2 Sekunden) - v1.6: von 10s auf 2s
+// reduziert fuer zeitnahe Anzeige in der Wasserverbrauchs-Weboberflaeche
+const unsigned long SEND_INTERVAL = 2000;
 
 // ================================================================
 //  FIRMWARE VERSION
 // ================================================================
-#define FIRMWARE_VERSION "1.5"
+#define FIRMWARE_VERSION "1.6"
 #define FIRMWARE_TYP     "LJ18A3"
 
 // ================================================================

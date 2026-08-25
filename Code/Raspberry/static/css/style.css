@@ -140,10 +140,11 @@ tr.device-offline td { opacity: 0.55; }
 .wheel-ring { fill: none; stroke: #0f3460; stroke-width: 4; }
 .wheel-star {
     fill: #00d4ff;
-    transform-origin: 50px 50px;
-    transform-box: fill-box;
 }
 .wheel-star.spinning {
+    /* Polygon ist symmetrisch um (0,0) gezeichnet und liegt in einer per
+       translate() bereits zentrierten <g> - daher dreht sich das Rad hier
+       sauber um seinen eigenen Mittelpunkt (kein "Schwingen" mehr). */
     animation-name: spin-wheel;
     animation-timing-function: linear;
     animation-iteration-count: infinite;

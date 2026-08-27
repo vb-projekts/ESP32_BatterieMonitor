@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}ESP32 Monitor - Garage{% endblock %}
+{% block extra_head %}
+<style>
+    .garage-layout { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
+    .garage-bay { 
+        flex: 1; min-width: 300px; background: #16213e; border-radius: 15px; 
+        padding: 20px; border: 1px solid #0f3460; text-align: center;
+    }
+    .visual-box { 
+        height: 200px; background: #0a1128; border-radius: 10px; position: relative; 
+        margin: 20px 0; overflow: hidden; border: 2px solid #16213e;
+    }
+    .gate-door {
+        position: absolute; top: 0; left: 10%; width: 80%; background: repeating-linear-gradient(0deg, #333, #333 10px, #444 10px, #444 20px);
+        border: 2px solid #555; transition: height 0.5s ease-in-out; z-index: 2;
+    }
+    .car-spot {
+        position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+        font-size: 50px; transition: opacity 0.3s; z-index: 1;
+    }
+    .btn-trigger {
+        background: #e8b86d22; color: #e8b86d; border: 2px solid #e8b86d;
+        border-radius: 10px; padding: 12px 24px; font-weight: bold; cursor: pointer;
+        width: 100%; font-size: 1.1em; transition: all 0.2s;
+    }
+    .btn-trigger:hover { background: #e8b86d; color: #1a1a2e; }
+    .btn-trigger:active { transform: scale(0.98); }
+    .status-text { font-size: 1.2em; font-weight: bold; margin-bottom: 5px; }
+    .dist-text { color: #888; font-size: 0.9em; }
+</style>
+{% endblock %}
+{% block content %}
+    <h1>&#128663; Garagen-Steuerung</h1>
+    <p class="timestamp">Stand: <span id="last-updated">--</span> <span id="refresh-indicator" class="live-dot"></span></p>
+
+    <div id="garage-container" class="garage-layout">
+        <!-- Wird per JS befüllt -->
+    </div>
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='js/garage.js') }}"></script>
+{% endblock %}

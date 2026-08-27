@@ -1,44 +1,45 @@
 {% extends "base.html" %}
-
 {% block title %}ESP32 Monitor - Admin{% endblock %}
-
 {% block content %}
     <h1>&#9881;&#65039; Admin</h1>
-    <p class="timestamp">
-        Eingeloggt &nbsp;|&nbsp; <a href="/admin/logout" style="color:#ff6b6b;">Abmelden</a>
-    </p>
-
-    <h2 class="firmware">&#128167; Gesamtverbrauch kalibrieren</h2>
+    <p class="timestamp">Eingeloggt | <a href="/admin/logout" style="color:#ff6b6b;">Abmelden</a></p>
+    <h2 class="firmware">&#128167; Wasserverbrauch kalibrieren</h2>
     <div class="fw-box">
-        <p class="no-data" style="text-align:left; font-style:normal; padding:0 0 16px 0;">
-            Dein physischer Wasserzähler startet nicht bei 0 - hier kannst du den
-            Gesamtverbrauch-Zähler pro Gerät auf den tatsächlichen Zählerstand setzen.
-            Ab diesem Wert wird ganz normal weitergezählt (auch über künftige
-            ESP32-Neustarts hinweg).
-        </p>
-
-        {% if geraete %}
-        {% for g in geraete %}
+        {% if geraete %}{% for g in geraete %}
         <div class="admin-geraet-box">
-            <div class="admin-geraet-header">
-                <span class="badge badge-wasser">LJ18A3</span>
-                <span class="meter-ip">{{ g.ip }}</span>
-            </div>
-            <div class="admin-geraet-werte">
-                <div>Aktueller Gesamtverbrauch (DB): <strong class="value-green">{{ "%.1f"|format(g.liter_lebenszeit) }} L</strong></div>
-                <div>Seit Neustart (ESP): <strong>{{ "%.1f"|format(g.liter_gesamt) }} L</strong></div>
-            </div>
+            <div class="admin-geraet-header"><span class="badge badge-wasser">LJ18A3</span><span class="meter-ip">{{ g.ip }}</span></div>
             <form method="POST" action="/admin/kalibrieren" class="admin-kali-form">
                 <input type="hidden" name="ip" value="{{ g.ip }}">
                 <label>Setze Gesamtverbrauch auf:</label>
                 <input type="number" step="0.1" name="neuer_wert" placeholder="z.B. 15234.0" required>
-                <span>L</span>
                 <button type="submit" class="btn-kali">&#10003; Kalibrieren</button>
             </form>
         </div>
-        {% endfor %}
-        {% else %}
-        <p class="no-data">Noch keine Geräte bekannt.</p>
-        {% endif %}
+        {% endfor %}{% else %}<p class="no-data">Keine Geräte.</p>{% endif %}
     </div>
+    <h2 style="color:#e8b86d; border-bottom-color:#e8b86d;">&#128663; Garage Kalibrierung</h2>
+    <div class="fw-box" style="border-left-color:#e8b86d;">
+        <div class="admin-geraet-box">
+            <form id="garage-kali-form" class="admin-kali-form">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px; width:100%;">
+                    <div><h4>Tor 1</h4>Min (Auf): <input type="number" id="t1_min" value="{{ garage_config.tor1.min }}"> cm<br>Max (Zu): <input type="number" id="t1_max" value="{{ garage_config.tor1.max }}"> cm</div>
+                    <div><h4>Tor 2</h4>Min (Auf): <input type="number" id="t2_min" value="{{ garage_config.tor2.min }}"> cm<br>Max (Zu): <input type="number" id="t2_max" value="{{ garage_config.tor2.max }}"> cm</div>
+                    <div><h4>Auto 1</h4>Schwelle: <input type="number" id="a1_th" value="{{ garage_config.auto1.threshold }}"> cm</div>
+                    <div><h4>Auto 2</h4>Schwelle: <input type="number" id="a2_th" value="{{ garage_config.auto2.threshold }}"> cm</div>
+                </div>
+                <button type="button" onclick="saveGarageConfig()" class="btn-kali" style="margin-top:20px; border-color:#e8b86d; color:#e8b86d;">Speichern</button>
+            </form>
+        </div>
+    </div>
+    <script>
+    function saveGarageConfig() {
+        const config = {
+            tor1: { min: parseInt(document.getElementById('t1_min').value), max: parseInt(document.getElementById('t1_max').value) },
+            tor2: { min: parseInt(document.getElementById('t2_min').value), max: parseInt(document.getElementById('t2_max').value) },
+            auto1: { threshold: parseInt(document.getElementById('a1_th').value) },
+            auto2: { threshold: parseInt(document.getElementById('a2_th').value) }
+        };
+        fetch('/api/garage/calibrate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) }).then(() => alert("Gespeichert!"));
+    }
+    </script>
 {% endblock %}

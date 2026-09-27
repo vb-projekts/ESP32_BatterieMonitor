@@ -31,25 +31,29 @@ function updateUI(data) {
         // Auto Präsenz
         const a1_present = dev.auto1_cm < config.auto1.threshold;
         const a2_present = dev.auto2_cm < config.auto2.threshold;
+        
+        // Opacity für Autos (sichtbar wenn anwesend)
+        const a1_opacity = a1_present ? 1 : 0.2;
+        const a2_opacity = a2_present ? 1 : 0.2;
 
         html += `
             <div class="garage-bay ${dev.online ? '' : 'device-offline'}">
                 <h3>Doppelgarage (${dev.ip})</h3>
                 <div style="display:flex; gap:10px; justify-content: center;">
                     <div style="flex:1; max-width: 250px;">
-                        <div class="status-text" style="color:#e8b86d">Tor 1</div>
+                        <div class="status-text" style="color:#e8b86d">Tor 1 - Ford Focus (Blau)</div>
                         <div class="visual-box">
                             <div class="gate-door" style="height: ${100 - t1_perc}%"></div>
-                            <div class="car-spot" style="opacity: ${a1_present ? 1 : 0.1}">🚗</div>
+                            <img src="/static/img/Ford_Focus_Seite.jpg" alt="Ford Focus" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); max-height: 120px; max-width: 180px; object-fit: contain; opacity: ${a1_opacity}; transition: opacity 0.3s; z-index: 1; pointer-events: none;">
                         </div>
                         <div class="dist-text">${dev.tor1_cm.toFixed(0)}cm / ${a1_present ? 'Belegt' : 'Frei'}</div>
                         <button class="btn-trigger" onclick="triggerGate('${dev.ip}', 1)">Taster 1</button>
                     </div>
                     <div style="flex:1; max-width: 250px;">
-                        <div class="status-text" style="color:#e8b86d">Tor 2</div>
+                        <div class="status-text" style="color:#e8b86d">Tor 2 - BMW (Schwarz)</div>
                         <div class="visual-box">
                             <div class="gate-door" style="height: ${100 - t2_perc}%"></div>
-                            <div class="car-spot" style="opacity: ${a2_present ? 1 : 0.1}">🚗</div>
+                            <img src="/static/img/BMW_F30_Seite.jpg" alt="BMW" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); max-height: 120px; max-width: 180px; object-fit: contain; opacity: ${a2_opacity}; transition: opacity 0.3s; z-index: 1; pointer-events: none;">
                         </div>
                         <div class="dist-text">${dev.tor2_cm.toFixed(0)}cm / ${a2_present ? 'Belegt' : 'Frei'}</div>
                         <button class="btn-trigger" onclick="triggerGate('${dev.ip}', 2)">Taster 2</button>

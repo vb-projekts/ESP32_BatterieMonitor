@@ -35,31 +35,35 @@ function updateUI(data) {
         // Opacity für Autos (sichtbar wenn anwesend)
         const a1_opacity = a1_present ? 1 : 0.2;
         const a2_opacity = a2_present ? 1 : 0.2;
+        
+        // Status Text mit Hervorhebung
+        const a1_status = a1_present ? '<span style="color: #ff6b6b; font-weight: bold; font-size: 1.1em;">BELEGT</span>' : '<span style="color: #51cf66; font-weight: bold; font-size: 1.1em;">FREI</span>';
+        const a2_status = a2_present ? '<span style="color: #ff6b6b; font-weight: bold; font-size: 1.1em;">BELEGT</span>' : '<span style="color: #51cf66; font-weight: bold; font-size: 1.1em;">FREI</span>';
 
         html += `
             <div class="garage-bay ${dev.online ? '' : 'device-offline'}">
-                <h3>Doppelgarage (${dev.ip})</h3>
-                <div style="display:flex; gap:10px; justify-content: center;">
+                <h3>🏠 Doppelgarage</h3>
+                <div style="display:flex; gap:20px; justify-content: center; margin-top: 20px;">
                     <div style="flex:1; max-width: 250px;">
-                        <div class="status-text" style="color:#e8b86d">Tor 1 - Ford Focus (Blau)</div>
+                        <div class="status-text" style="color:#e8b86d; margin-bottom: 10px;">Tor 1 - Ford Focus</div>
+                        <button class="btn-trigger" onclick="triggerGate('${dev.ip}', 1)" style="margin-bottom: 15px;">Taster 1</button>
                         <div class="visual-box">
                             <div class="gate-door" style="height: ${100 - t1_perc}%"></div>
                             <img src="/static/img/Ford_Focus_Seite.jpg" alt="Ford Focus" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); max-height: 120px; max-width: 180px; object-fit: contain; opacity: ${a1_opacity}; transition: opacity 0.3s; z-index: 1; pointer-events: none;">
                         </div>
-                        <div class="dist-text">${dev.tor1_cm.toFixed(0)}cm / ${a1_present ? 'Belegt' : 'Frei'}</div>
-                        <button class="btn-trigger" onclick="triggerGate('${dev.ip}', 1)">Taster 1</button>
+                        <div class="dist-text" style="margin-top: 12px;">${a1_status}</div>
                     </div>
                     <div style="flex:1; max-width: 250px;">
-                        <div class="status-text" style="color:#e8b86d">Tor 2 - BMW (Schwarz)</div>
+                        <div class="status-text" style="color:#e8b86d; margin-bottom: 10px;">Tor 2 - BMW</div>
+                        <button class="btn-trigger" onclick="triggerGate('${dev.ip}', 2)" style="margin-bottom: 15px;">Taster 2</button>
                         <div class="visual-box">
                             <div class="gate-door" style="height: ${100 - t2_perc}%"></div>
                             <img src="/static/img/BMW_F30_Seite.jpg" alt="BMW" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); max-height: 120px; max-width: 180px; object-fit: contain; opacity: ${a2_opacity}; transition: opacity 0.3s; z-index: 1; pointer-events: none;">
                         </div>
-                        <div class="dist-text">${dev.tor2_cm.toFixed(0)}cm / ${a2_present ? 'Belegt' : 'Frei'}</div>
-                        <button class="btn-trigger" onclick="triggerGate('${dev.ip}', 2)">Taster 2</button>
+                        <div class="dist-text" style="margin-top: 12px;">${a2_status}</div>
                     </div>
                 </div>
-                <div class="footer" style="margin-top:15px">Uptime: ${dev.uptime} | v${dev.firmware}</div>
+                <div class="footer" style="margin-top:20px; font-size: 0.9em; color: #999;">Uptime: ${dev.uptime} | v${dev.firmware}</div>
             </div>
         `;
     });

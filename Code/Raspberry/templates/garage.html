@@ -15,10 +15,6 @@
         position: absolute; top: 0; left: 10%; width: 80%; background: repeating-linear-gradient(0deg, #333, #333 10px, #444 10px, #444 20px);
         border: 2px solid #555; transition: height 0.5s ease-in-out; z-index: 2;
     }
-    .car-spot {
-        position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
-        font-size: 50px; transition: opacity 0.3s; z-index: 1;
-    }
     .btn-trigger {
         background: #e8b86d22; color: #e8b86d; border: 2px solid #e8b86d;
         border-radius: 10px; padding: 12px 24px; font-weight: bold; cursor: pointer;
@@ -28,13 +24,62 @@
     .btn-trigger:active { transform: scale(0.98); }
     .status-text { font-size: 1.2em; font-weight: bold; margin-bottom: 5px; }
     .dist-text { color: #888; font-size: 0.9em; }
+    
+    #garage-history {
+        display: none;
+        background: #16213e;
+        border-radius: 15px;
+        padding: 20px;
+        margin-top: 30px;
+        border: 1px solid #0f3460;
+    }
+    
+    #garage-history h3 {
+        color: #e8b86d;
+        margin-top: 0;
+    }
+    
+    #garage-history h4 {
+        color: #a78bfa;
+        margin-top: 15px;
+    }
+    
+    #garage-history h5 {
+        color: #888;
+        font-size: 0.95em;
+    }
+    
+    .history-toggle {
+        background: #e8b86d22;
+        color: #e8b86d;
+        border: 2px solid #e8b86d;
+        border-radius: 10px;
+        padding: 10px 15px;
+        font-size: 1.2em;
+        cursor: pointer;
+        margin-top: 20px;
+        transition: all 0.2s;
+    }
+    
+    .history-toggle:hover {
+        background: #e8b86d;
+        color: #1a1a2e;
+    }
 </style>
 {% endblock %}
 {% block content %}
-    <h1>&#128663; Garagen-Steuerung</h1>
+    <h1>🚗 Garagen-Steuerung</h1>
     <p class="timestamp">Stand: <span id="last-updated">--</span> <span id="refresh-indicator" class="live-dot"></span></p>
 
     <div id="garage-container" class="garage-layout">
+        <!-- Wird per JS befüllt -->
+    </div>
+    
+    <button class="history-toggle" onclick="toggleHistory()">
+        <span id="eye-icon">👁️‍🗨️</span> Fahrtenverlauf
+    </button>
+    
+    <div id="garage-history">
         <!-- Wird per JS befüllt -->
     </div>
 {% endblock %}

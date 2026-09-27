@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 # ============================================================
-#  Raspberry Pi Flask Server - Kombiniert (v2.9)
+#  Raspberry Pi Flask Server - Kombiniert (v3.0)
 #  Empfaengt Daten von:
 #    - ESP32 Ultraschall-Monitor (Uptime_Schall.ino)  -> sensor_typ fehlt ODER "HC-SR04"
 #    - ESP32 Wasser-Monitor      (Uptime_LJ18A3.ino)  -> sensor_typ = "LJ18A3"
 #    - ESP32 Garage-Monitor      (Garage_Control.ino) -> sensor_typ = "Garage"
+#
+# v3.0 ÄNDERUNGEN:
+#  - Garage-Steuerung implementiert
+#  - cmd_trigger_tor1/tor2 Felder in Garage-Device-Initialisierung
+#  - WebUI-Buttons triggern nun echte Relais-Befehle
 # ============================================================
 
 from flask import Flask, request, jsonify, render_template, send_file, session, redirect, url_for
@@ -24,6 +29,14 @@ from wasserdb.queries import (
     kalibriere_lebenszeit,
 )
 
+from garagedb import init_db as init_garage_db
+from garagedb.queries import (
+    insert_garage_event,
+    open_trip,
+    close_trip,
+    get_recent_trips,
+)
+
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = secrets.token_hex(32)
 data_lock = threading.Lock()
@@ -41,6 +54,9 @@ def inject_server_version():
     return dict(server_version=SERVER_VERSION)
 
 OFFLINE_SECS = 30
+GARAGE_STABILITY_SECS = 5  # 5 Sekunden Stabilitätsprüfung vor Event
+garage_state = {}  # {(ip, tor): {'status': 'belegt'/'frei', 'stability_count': int}}
+
 DURCHFLUSS_GLAETTUNG = 0.3
 SERVER_VERSION = "3.0"
 
@@ -96,6 +112,68 @@ messages = []
 # ============================================================
 #  API Endpunkt - Sensordaten empfangen
 # ============================================================
+# ============================================================
+#  Garage-Tracking Funktionen (v3.0)
+# ============================================================
+
+def update_garage_state(ip, tor, is_present, current_time):
+    """
+    Aktualisiert den Garage-State mit Stabilitätsprüfung.
+    Nur nach GARAGE_STABILITY_SECS konsistenten Messungen wird ein Event erzeugt.
+    Verhindert Fehlauslösungen durch Fußgänger oder kurzzeitige Unterbrechungen.
+    """
+    key = (ip, tor)
+    
+    if key not in garage_state:
+        garage_state[key] = {
+            'status': 'belegt' if is_present else 'frei',
+            'stability_count': 1
+        }
+        return None  # Noch nicht stabil genug
+    
+    state = garage_state[key]
+    current_status = 'belegt' if is_present else 'frei'
+    
+    # Status gleich wie vorher?
+    if current_status == state['status']:
+        state['stability_count'] += 1
+    else:
+        state['stability_count'] = 1  # Reset counter bei Wechsel
+    
+    # Ist der neue Status stabil genug?
+    if state['stability_count'] >= GARAGE_STABILITY_SECS:
+        if current_status != state['status']:
+            # Status hat sich geändert und ist stabil
+            event_type = 'angekommen' if current_status == 'belegt' else 'verlassen'
+            state['status'] = current_status
+            state['stability_count'] = 1
+            return event_type
+    
+    return None
+
+
+def process_garage_data(ip, tor, distanz_cm, config):
+    """
+    Verarbeitet Garage-Sensordaten und erzeugt Events mit Stabilitätsprüfung.
+    """
+    threshold = config[f'auto{tor}']['threshold']
+    is_present = distanz_cm < threshold
+    current_time = datetime.now()
+    
+    event = update_garage_state(ip, tor, is_present, current_time)
+    
+    if event:
+        insert_garage_event(ip, tor, event, zeitstempel=current_time.isoformat(timespec="seconds"), distanz_cm=distanz_cm)
+        
+        # Trip-Logik
+        auto_typ = 'ford' if tor == 1 else 'bmw'
+        
+        if event == 'verlassen':
+            open_trip(ip, tor, auto_typ)
+        elif event == 'angekommen':
+            close_trip(ip, tor)
+
+
 @app.route("/api/data", methods=["POST"])
 def empfange_daten():
     global messages
@@ -286,5 +364,31 @@ def fw_download(typ):
     if not os.path.exists(p): return "FEHLT", 404
     return send_file(p, mimetype="application/octet-stream", as_attachment=True, download_name=f"firmware_{typ}.bin")
 
+@app.route("/api/garage/history")
+def api_garage_history():
+    """Gibt die letzten Trips für alle Tore zurück."""
+    try:
+        with data_lock:
+            result = {}
+            for ip in devices_garage.keys():
+                try:
+                    result[ip] = {
+                        'tor1_trips': get_recent_trips(ip, 1, limit=10),
+                        'tor2_trips': get_recent_trips(ip, 2, limit=10),
+                    }
+                except Exception as e:
+                    print(f"Fehler beim Abrufen von Trips für {ip}: {e}")
+                    result[ip] = {
+                        'tor1_trips': [],
+                        'tor2_trips': [],
+                    }
+            return jsonify(result), 200
+    except Exception as e:
+        print(f"Fehler in /api/garage/history: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+init_garage_db()

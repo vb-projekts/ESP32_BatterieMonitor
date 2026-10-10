@@ -62,17 +62,16 @@ function updateHistoryUI(data) {
     
     for (const [ip, trips] of Object.entries(data)) {
         html += `<div style="margin-bottom: 30px;">`;
-        html += `<h4>${ip}</h4>`;
         
         // Tor 1
         html += `<div style="margin-bottom: 20px;">`;
-        html += `<h5>🔵 Tor 1 - Ford Focus</h5>`;
+        html += `<h5>🚪 Tor 1 - Ford Focus</h5>`;
         html += buildTripsTable(trips.tor1_trips, 'ford');
         html += `</div>`;
         
         // Tor 2
         html += `<div style="margin-bottom: 20px;">`;
-        html += `<h5>⚫ Tor 2 - BMW</h5>`;
+        html += `<h5>🚪 Tor 2 - BMW</h5>`;
         html += buildTripsTable(trips.tor2_trips, 'bmw');
         html += `</div>`;
         
@@ -87,7 +86,7 @@ function buildTripsTable(trips, autoType) {
         return '<p style="color: #999;">Keine Fahrten erfasst.</p>';
     }
     
-    const carEmoji = autoType === 'ford' ? '🔵' : '⚫';
+    const carEmoji = autoType === 'ford' ? '🔵 🚗' : '⚫ 🚗';
     
     let html = `<table style="width: 100%; border-collapse: collapse; background: #0a1128; border-radius: 8px; overflow: hidden;">`;
     html += `<tr style="background: #16213e; border-bottom: 1px solid #0f3460;">`;
@@ -140,7 +139,7 @@ function updateUI(data) {
                 <h3>🏠 Doppelgarage</h3>
                 <div style="display:flex; gap:20px; justify-content: center; margin-top: 20px;">
                     <div style="flex:1; max-width: 250px;">
-                        <div class="status-text" style="color:#e8b86d; margin-bottom: 10px;">Tor 1 - Ford Focus</div>
+                        <div class="status-text" style="color:#e8b86d; margin-bottom: 10px;">🚪 Tor 1 - Ford Focus</div>
                         <button class="btn-trigger" onclick="triggerGate('${dev.ip}', 1)" style="margin-bottom: 15px;">Taster 1</button>
                         <div class="visual-box">
                             <div class="gate-door" style="height: ${100 - t1_perc}%"></div>
@@ -149,7 +148,7 @@ function updateUI(data) {
                         <div class="dist-text" style="margin-top: 12px;">${a1_status}</div>
                     </div>
                     <div style="flex:1; max-width: 250px;">
-                        <div class="status-text" style="color:#e8b86d; margin-bottom: 10px;">Tor 2 - BMW</div>
+                        <div class="status-text" style="color:#e8b86d; margin-bottom: 10px;">🚪 Tor 2 - BMW</div>
                         <button class="btn-trigger" onclick="triggerGate('${dev.ip}', 2)" style="margin-bottom: 15px;">Taster 2</button>
                         <div class="visual-box">
                             <div class="gate-door" style="height: ${100 - t2_perc}%"></div>
@@ -171,6 +170,9 @@ function fetchGarage() {
         .then(data => {
             updateUI(data);
             setLiveIndicator("refresh-indicator", true);
+            if (historyVisible) {
+                fetchGarageHistory();
+            }
         })
         .catch(err => {
             console.error("Fehler beim Abrufen der Garage-Daten:", err);

@@ -13,6 +13,7 @@
             <a href="/" class="{{ 'active' if request.path == '/' else '' }}">&#128421;&#65039; Übersicht</a>
             <a href="/wasser" class="{{ 'active' if request.path == '/wasser' else '' }}">&#128167; Wasserverbrauch</a>
             <a href="/garage" class="{{ 'active' if request.path == '/garage' else '' }}">&#128663; Garage</a>
+            <a href="/sqlnav" class="{{ 'active' if request.path == '/sqlnav' else '' }}">&#128451;&#65039; SQL Navigator</a>
             <a href="/admin" class="{{ 'active' if request.path.startswith('/admin') else '' }}">&#9881;&#65039; Admin</a>
         </div>
         <span class="version-tag" id="version-tag">v{{ server_version }}</span>

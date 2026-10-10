@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% block title %}SQL Navigator - ESP32 Monitor{% endblock %}
+
+{% block extra_head %}
+<style>
+    .sqlnav-container {
+        display: flex;
+        gap: 16px;
+        margin-top: 15px;
+        height: calc(100vh - 120px);
+        min-height: 600px;
+    }
+    .sqlnav-sidebar {
+        width: 320px;
+        min-width: 280px;
+        background: #16213e;
+        border-radius: 8px;
+        padding: 15px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        border: 1px solid #0f3460;
+    }
+    .sqlnav-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        min-width: 0;
+    }
+    .sqlnav-panel {
+        background: #16213e;
+        border-radius: 8px;
+        padding: 15px;
+        border: 1px solid #0f3460;
+    }
+    .editor-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .results-panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 250px;
+        overflow: hidden;
+    }
+    .db-group {
+        border-bottom: 1px solid #0f3460;
+        padding-bottom: 12px;
+    }
+    .db-group:last-child {
+        border-bottom: none;
+    }
+    .db-title {
+        font-weight: bold;
+        color: #00d4ff;
+        font-size: 1.05em;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .table-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    .table-item {
+        margin-bottom: 4px;
+    }
+    .table-header {
+        cursor: pointer;
+        padding: 6px 8px;
+        border-radius: 5px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #0f2b48;
+        font-size: 0.9em;
+        font-weight: 500;
+        user-select: none;
+        transition: background 0.15s;
+    }
+    .table-header:hover {
+        background: #143b63;
+    }
+    .table-name-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .toggle-icon {
+        font-size: 0.75em;
+        transition: transform 0.2s;
+        display: inline-block;
+    }
+    .toggle-icon.open {
+        transform: rotate(90deg);
+    }
+    .columns-list {
+        display: none;
+        list-style: none;
+        padding: 6px 0 6px 14px;
+        margin: 0;
+        font-size: 0.82em;
+    }
+    .column-item {
+        padding: 3px 6px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: #bbb;
+        border-left: 2px solid #0f3460;
+        margin-left: 4px;
+    }
+    .column-name {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .pk-badge {
+        background: #f59e0b;
+        color: #000;
+        font-size: 0.7em;
+        font-weight: bold;
+        padding: 1px 4px;
+        border-radius: 3px;
+    }
+    .col-type {
+        color: #64748b;
+        font-family: monospace;
+        font-size: 0.9em;
+    }
+    .editor-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    .toolbar-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .db-select {
+        background: #0f3460;
+        color: #fff;
+        border: 1px solid #1e4976;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 0.9em;
+        cursor: pointer;
+    }
+    .btn-exec {
+        background: #00ff99;
+        color: #0a192f;
+        border: none;
+        padding: 7px 18px;
+        border-radius: 6px;
+        font-weight: bold;
+        cursor: pointer;
+        font-size: 0.92em;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.15s, transform 0.1s;
+    }
+    .btn-exec:hover {
+        background: #34d399;
+    }
+    .btn-exec:active {
+        transform: scale(0.98);
+    }
+    .btn-clear {
+        background: #334155;
+        color: #eee;
+        border: none;
+        padding: 7px 14px;
+        border-radius: 6px;
+        font-size: 0.9em;
+        cursor: pointer;
+    }
+    .btn-clear:hover {
+        background: #475569;
+    }
+    .sql-textarea {
+        width: 100%;
+        height: 120px;
+        background: #0a1128;
+        color: #00ff99;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 0.95em;
+        border: 1px solid #1e3a5f;
+        border-radius: 6px;
+        padding: 10px;
+        resize: vertical;
+        box-sizing: border-box;
+    }
+    .sql-textarea:focus {
+        outline: none;
+        border-color: #00d4ff;
+    }
+    .results-table-wrap {
+        flex: 1;
+        overflow: auto;
+        background: #0a1128;
+        border-radius: 6px;
+        border: 1px solid #1e3a5f;
+        margin-top: 8px;
+    }
+    .status-bar {
+        font-size: 0.85em;
+        color: #aaa;
+        padding: 6px 2px 0 2px;
+        display: flex;
+        justify-content: space-between;
+    }
+    .status-success { color: #00ff99; }
+    .status-error { color: #ff6b6b; }
+    .quick-query-btn {
+        background: none;
+        border: none;
+        color: #00d4ff;
+        cursor: pointer;
+        padding: 2px 5px;
+        font-size: 0.8em;
+        text-decoration: underline;
+    }
+    .quick-query-btn:hover {
+        color: #fff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
+    <h2 style="margin:0; border:none; padding:0;">&#128451;&#65039; SQL Navigator</h2>
+    <span style="font-size:0.85em; color:#888;">Interaktive SQLite-Abfrageumgebung</span>
+</div>
+
+<div class="sqlnav-container">
+    <!-- Linker Bereich: Datenbank- und Tabellen-Baumansicht -->
+    <aside class="sqlnav-sidebar" id="sqlnav-sidebar">
+        <div style="font-size: 0.9em; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 0.5px;">
+            Datenbanken & Tabellen
+        </div>
+        <div id="sidebar-schema">
+            <div style="color: #64748b; font-size: 0.9em; text-align: center; padding: 20px 0;">Schema wird geladen...</div>
+        </div>
+    </aside>
+
+    <!-- Rechter Bereich: SQL-Editor oben, Ergebnis-Tabelle unten -->
+    <main class="sqlnav-main">
+        <!-- Oberer Bereich: SQL Statement Eingabe -->
+        <section class="sqlnav-panel editor-panel">
+            <div class="editor-toolbar">
+                <div class="toolbar-left">
+                    <label for="db-select" style="font-size: 0.9em; color:#aaa;">Ziel-DB:</label>
+                    <select id="db-select" class="db-select">
+                        <option value="garagedb">&#128663; garagedb (garage.db)</option>
+                        <option value="wasserdb">&#128167; wasserdb (wasserverbrauch.db)</option>
+                    </select>
+                    <span style="color: #64748b; font-size: 0.82em;">(Tipp: Strg + Enter zum Ausführen)</span>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" class="btn-clear" onclick="clearEditor()">Leeren</button>
+                    <button type="button" class="btn-exec" onclick="executeCurrentQuery()">&#9654; Ausführen</button>
+                </div>
+            </div>
+            <textarea id="sql-query" class="sql-textarea" spellcheck="false" placeholder="-- SQL Abfrage hier eingeben, z.B.:&#10;SELECT * FROM garage_trips ORDER BY id DESC LIMIT 20;"></textarea>
+        </section>
+
+        <!-- Unterer Bereich: Ergebnis-Anzeige -->
+        <section class="sqlnav-panel results-panel">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight: bold; font-size: 0.95em; color: #e8b86d;">Ergebnis</span>
+                <span id="result-meta" style="font-size:0.82em; color:#888;">Bereit</span>
+            </div>
+            <div class="results-table-wrap" id="results-wrap">
+                <div style="color: #64748b; text-align: center; padding: 40px 0; font-size: 0.9em;">
+                    Führe ein SQL-Statement aus, um Ergebnisse anzuzeigen.
+                </div>
+            </div>
+            <div class="status-bar" id="status-bar">
+                <span id="status-text">Keine Abfrage ausgeführt</span>
+                <span id="query-time"></span>
+            </div>
+        </section>
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/sqlnav.js') }}"></script>
+{% endblock %}

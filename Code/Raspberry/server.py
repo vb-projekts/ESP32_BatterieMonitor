@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # ============================================================
-#  Raspberry Pi Flask Server - Kombiniert (v3.0)
+#  Raspberry Pi Flask Server - Kombiniert (v3.1)
+#  v3.1: SQL Navigator Feature hinzugefügt
 #  Empfaengt Daten von:
 #    - ESP32 Ultraschall-Monitor (Uptime_Schall.ino)  -> sensor_typ fehlt ODER "HC-SR04"
 #    - ESP32 Wasser-Monitor      (Uptime_LJ18A3.ino)  -> sensor_typ = "LJ18A3"
@@ -44,6 +45,7 @@ data_lock = threading.Lock()
 ADMIN_PASSWORT = "aendere-mich"
 
 init_db()
+init_garage_db()
 starte_rollup_thread()
 
 def ist_admin_eingeloggt():
@@ -54,11 +56,11 @@ def inject_server_version():
     return dict(server_version=SERVER_VERSION)
 
 OFFLINE_SECS = 30
-GARAGE_STABILITY_SECS = 5  # 5 Sekunden Stabilitätsprüfung vor Event
+GARAGE_STABILITY_COUNT = 5  # ca. 10 Sek. bei 2s Takt  # 5 Sekunden Stabilitätsprüfung vor Event
 garage_state = {}  # {(ip, tor): {'status': 'belegt'/'frei', 'stability_count': int}}
 
 DURCHFLUSS_GLAETTUNG = 0.3
-SERVER_VERSION = "3.0"
+SERVER_VERSION = "3.1"
 
 # ============================================================
 #  Firmware Pfade
@@ -118,60 +120,88 @@ messages = []
 
 def update_garage_state(ip, tor, is_present, current_time):
     """
-    Aktualisiert den Garage-State mit Stabilitätsprüfung.
-    Nur nach GARAGE_STABILITY_SECS konsistenten Messungen wird ein Event erzeugt.
-    Verhindert Fehlauslösungen durch Fußgänger oder kurzzeitige Unterbrechungen.
+    Stabilitaetspruefung zur Vermeidung von Fehlausloesungen (z.B. Fussgaenger unter Sensor).
+    
+    Logik:
+    - Status-Wechsel wird erst bestaetigt, wenn der NEUE Zustand GARAGE_STABILITY_COUNT
+      Zyklen hintereinander gemessen wurde (~10 bis 15 Sekunden).
+    - Kurzzeitige Unterbrechungen (Fussgaenger) resetten den Testzaehler.
     """
     key = (ip, tor)
-    
-    if key not in garage_state:
-        garage_state[key] = {
-            'status': 'belegt' if is_present else 'frei',
-            'stability_count': 1
-        }
-        return None  # Noch nicht stabil genug
-    
-    state = garage_state[key]
     current_status = 'belegt' if is_present else 'frei'
     
-    # Status gleich wie vorher?
-    if current_status == state['status']:
-        state['stability_count'] += 1
-    else:
-        state['stability_count'] = 1  # Reset counter bei Wechsel
+    if key not in garage_state:
+        # Erste Messung nach Serverstart
+        garage_state[key] = {
+            'status': current_status,
+            'pending_status': current_status,
+            'stability_count': 0
+        }
+        return None
     
-    # Ist der neue Status stabil genug?
-    if state['stability_count'] >= GARAGE_STABILITY_SECS:
-        if current_status != state['status']:
-            # Status hat sich geändert und ist stabil
-            event_type = 'angekommen' if current_status == 'belegt' else 'verlassen'
-            state['status'] = current_status
+    state = garage_state[key]
+    
+    if current_status != state['status']:
+        # Weicht vom bestaetigten Status ab
+        if current_status == state['pending_status']:
+            state['stability_count'] += 1
+        else:
+            state['pending_status'] = current_status
             state['stability_count'] = 1
-            return event_type
-    
+            
+        if state['stability_count'] >= GARAGE_STABILITY_COUNT:
+            # Neuer Zustand ist bestaetigt stabil!
+            state['status'] = current_status
+            state['pending_status'] = current_status
+            state['stability_count'] = 0
+            return 'verlassen' if current_status == 'frei' else 'angekommen'
+    else:
+        # Status entspricht aktuellem Zustand
+        state['pending_status'] = current_status
+        state['stability_count'] = 0
+        
     return None
 
 
 def process_garage_data(ip, tor, distanz_cm, config):
     """
-    Verarbeitet Garage-Sensordaten und erzeugt Events mit Stabilitätsprüfung.
+    Verarbeitet Sensordaten eines Tors fuer den Fahrtenverlauf.
+    
+    Logik fuer maximale Robustheit bei Ausfaellen:
+    1. Bei 'verlassen':
+       - Neuer Eintrag in garage_trips wird erstellt.
+       - Angekommen_zeit und dauer_sekunden bleiben NULL (leer).
+    2. Bei 'angekommen':
+       - Letzter OFFENER Eintrag (angekommen_zeit IS NULL) wird gesucht.
+       - Falls vorhanden: Ankunftszeitpunkt und Dauer werden eingetragen.
+       - Falls KEIN offener Eintrag vorhanden ist (z.B. Verlassen waehrend Systemausfall verschluckt):
+         Es wird KEIN Trip geschlossen und kein Dummy angelegt, um falsche Dauern zu verhindern.
+         Fruehere offene Trips bleiben einfach unangetastet offen!
     """
-    threshold = config[f'auto{tor}']['threshold']
+    if distanz_cm is None or distanz_cm < 0:
+        return
+        
+    threshold = config.get(f'auto{tor}', {}).get('threshold', 150)
     is_present = distanz_cm < threshold
     current_time = datetime.now()
     
     event = update_garage_state(ip, tor, is_present, current_time)
     
     if event:
-        insert_garage_event(ip, tor, event, zeitstempel=current_time.isoformat(timespec="seconds"), distanz_cm=distanz_cm)
-        
-        # Trip-Logik
         auto_typ = 'ford' if tor == 1 else 'bmw'
+        iso_now = current_time.isoformat(timespec="seconds")
+        
+        insert_garage_event(ip, tor, event, zeitstempel=iso_now, distanz_cm=distanz_cm)
         
         if event == 'verlassen':
-            open_trip(ip, tor, auto_typ)
+            trip_id = open_trip(ip, tor, auto_typ, iso_now)
+            print(f"[GARAGE] Tor {tor} ({auto_typ}): Auto hat Garage VERLASSEN -> Neuer Eintrag #{trip_id}")
         elif event == 'angekommen':
-            close_trip(ip, tor)
+            closed = close_trip(ip, tor, iso_now)
+            if closed:
+                print(f"[GARAGE] Tor {tor} ({auto_typ}): Auto ANGEKOMMEN -> Eintrag abgeschlossen")
+            else:
+                print(f"[GARAGE] Tor {tor} ({auto_typ}): Auto ANGEKOMMEN, aber kein offener Trip vorhanden (Verlassen verschluckt). Eintrag bleibt unberuehrt.")
 
 
 @app.route("/api/data", methods=["POST"])
@@ -200,6 +230,13 @@ def empfange_daten():
                     "cmd_trigger_tor2": existing_device.get("cmd_trigger_tor2", False)
                 }
                 details = f"T1: {daten.get('tor1_cm')}cm | T2: {daten.get('tor2_cm')}cm"
+
+                # Fahrtenverlauf: Sensordaten an Garagen-Tracking uebergeben
+                cfg = load_garage_config()
+                if "auto1_cm" in daten:
+                    process_garage_data(ip, 1, float(daten.get("auto1_cm", -1)), cfg)
+                if "auto2_cm" in daten:
+                    process_garage_data(ip, 2, float(daten.get("auto2_cm", -1)), cfg)
             elif sensor_typ == "LJ18A3":
                 vorheriges = devices_lj18a3.get(ip)
                 neuer_liter = float(daten.get("liter_gesamt", 0))
@@ -328,6 +365,101 @@ def wasser_seite(): return render_template("wasser.html")
 @app.route("/garage")
 def garage_seite(): return render_template("garage.html")
 
+@app.route("/sqlnav")
+def sqlnav_seite():
+    """
+    Rendert die SQL Navigator Weboberflaeche (v3.1).
+    Ermoeglicht Inspektion von garagedb und wasserdb sowie Abfragen.
+    """
+    return render_template("sqlnav.html")
+
+@app.route("/api/sqlnav/schema")
+def api_sqlnav_schema():
+    """
+    Liefert das Datenbankschema (Tabellen, Spalten, Datentypen, PK-Flags)
+    fuer garagedb und wasserdb zur Anzeige im linken Navigationsbereich.
+    """
+    def get_db_schema(connection_fn):
+        schema = []
+        try:
+            conn = connection_fn()
+            try:
+                cur = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+                )
+                tables = [r[0] for r in cur.fetchall()]
+                for t in tables:
+                    c_cur = conn.execute(f"PRAGMA table_info('{t}')")
+                    cols = []
+                    for c in c_cur.fetchall():
+                        cols.append({
+                            "name": c[1],
+                            "type": c[2] or "ANY",
+                            "notnull": bool(c[3]),
+                            "pk": bool(c[5])
+                        })
+                    schema.append({"name": t, "columns": cols})
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"[SQLNAV] Fehler beim Auslesen des Schemas: {e}")
+        return schema
+
+    from wasserdb import get_connection as get_wasser_conn
+    from garagedb import get_connection as get_garage_conn
+
+    return jsonify({
+        "garagedb": get_db_schema(get_garage_conn),
+        "wasserdb": get_db_schema(get_wasser_conn)
+    })
+
+@app.route("/api/sqlnav/execute", methods=["POST"])
+def api_sqlnav_execute():
+    """
+    Fuehrt ein vom Benutzer eingegebenes SQL-Statement auf der gewaehlten Datenbank aus.
+    Gibt Ergebnis-Zeilen (fuer SELECT/PRAGMA) oder Zeilenanzahl (fuer DML) zurueck.
+    """
+    data = request.get_json(force=True) or {}
+    db_target = data.get("db", "garagedb")
+    query = (data.get("query") or "").strip()
+
+    if not query:
+        return jsonify({"success": False, "error": "Kein SQL-Statement uebergeben."}), 400
+
+    from wasserdb import get_connection as get_wasser_conn
+    from garagedb import get_connection as get_garage_conn
+
+    conn_fn = get_garage_conn if db_target == "garagedb" else get_wasser_conn
+
+    try:
+        conn = conn_fn()
+        try:
+            cur = conn.execute(query)
+            # Pruefe ob Abfrage ein Result-Set liefert (z.B. SELECT, PRAGMA)
+            if cur.description:
+                cols = [desc[0] for desc in cur.description]
+                raw_rows = cur.fetchall()
+                # Umwandlung der sqlite3.Row in Standard-Listen
+                rows = [[val for val in row] for row in raw_rows]
+                return jsonify({
+                    "success": True,
+                    "type": "select",
+                    "columns": cols,
+                    "rows": rows,
+                    "row_count": len(rows)
+                })
+            else:
+                conn.commit()
+                return jsonify({
+                    "success": True,
+                    "type": "dml",
+                    "rows_affected": cur.rowcount
+                })
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 200
+
 @app.route("/admin")
 def admin_seite():
     if not ist_admin_eingeloggt(): return render_template("admin_login.html")
@@ -391,4 +523,3 @@ def api_garage_history():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
-init_garage_db()
